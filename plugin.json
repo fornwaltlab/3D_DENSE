@@ -1,0 +1,9 @@
+{
+    "package": "dense3D_plugin",
+    "version": "0.1.0",
+    "description": "A plugin for analyzing 3D DENSE data",
+    "name": "3D DENSE Analysis",
+    "author": "Jonathan Suever",
+    "email": "suever@gmail.com",
+    "url": "https://github.com/fornwaltlab/dense3D_plugin"
+}
