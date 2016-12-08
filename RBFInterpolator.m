@@ -230,7 +230,7 @@ classdef RBFInterpolator < hgsetget
             res = (queries * self.Weights(nNodes + 2 : end,:)) + S;
         end
 
-        function B = subsref(self, S)
+        function varargout = subsref(self, S)
             % subsref - Overloaded subscript referencing
             %
             %   This is overloaded because we want to be able to use
@@ -238,9 +238,9 @@ classdef RBFInterpolator < hgsetget
 
             switch S(1).type
                 case '()'
-                    B = query(self, S(1).subs{:});
+                    [varargout{1:nargout}] = query(self, S(1).subs{:});
                 otherwise
-                    B = builtin('subsref', self, S);
+                    [varargout{1:nargout}] = builtin('subsref', self, S);
             end
         end
     end
