@@ -140,9 +140,10 @@ classdef RBFInterpolator < hgsetget
             assert(size(self.Points, 1) == size(self.Data, 1),...
                 'Data must be the same size as your points');
 
-            % Process all of the input arguments and assign the necessary
-            % properties
-            set(self, varargin{:});
+            % Process all input arguments and assign the necessary props
+            if numel(varargin)
+                set(self, varargin{:});
+            end
 
             % Compute the average distance between nodes
             if isempty(self.Constant)
