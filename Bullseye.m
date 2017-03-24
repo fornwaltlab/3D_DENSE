@@ -1,4 +1,4 @@
-classdef Bullseye < HGParrot
+classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
     properties (SetObservable)
         AngularOffset   = 2*pi/3    % Angular offset of bullseye
