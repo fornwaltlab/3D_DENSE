@@ -1,0 +1,784 @@
+classdef DENSE3Dviewer < DataViewer
+
+    % Data to show
+    %
+    %   Mesh (3D Display)
+    %   Polar Strains (Global curve, regional curves, bullseye)
+    %   Principal Strains (Global curve, regional curves, bullseye)
+    %   Shear Strains (Global curve, regional curves, bullseye)
+    %   Torsion (Global curve, regional curves, bullseye)
+    %   Peak Polar Strains (Bullseye)
+    %   Peak Principal Strains (Bullseye)
+    %   Peak Shear Strains (Bullseye)
+    %   CURE/RURE/LURE (global curve)
+    %   Delay Times (Bullseye)
+
+    properties
+        Handles
+        Data
+        ActiveSegments = true(1, 17);
+    end
+
+    properties (Hidden)
+        api
+        options
+
+        template = struct( ...
+            'initFcn',      [], ...
+            'resizeFcn',    [], ...
+            'playbackFcn',  [], ...
+            'deleteFcn',    []);
+
+        dispclr = [78, 101, 148] / 255;
+
+        cache = struct()
+        hlistener
+    end
+
+    properties (Hidden)
+        % Provides a mapping from each type of strain to it's name,
+        % scaling, display format, and peak determination function
+        mappings = struct( ...
+            'RR',       {{'Radial Strain (%)',                  @(x)x * 100,        '%.0f', @max}}, ...
+            'CC',       {{'Circum. Strain (%)',                 @(x)x * 100,        '%.0f', @min}}, ...
+            'LL',       {{'Long. Strain (%)',                   @(x)x * 100,        '%.0f', @min}}, ...
+            'p1',       {{'1st Principal Strain (%)',           @(x)x * 100,        '%.0f', @max}}, ...
+            'p2',       {{'2nd Principal Strain (%)',           @(x)x * 100,        '%.0f', @min}}, ...
+            'p3',       {{'3rd Principal Strain (%)',           @(x)x * 100,        '%.0f', @min}}, ...
+            'RL',       {{'RL Shear Strain (%)'                 @(x)x * 100,        '%.0f', @min}}, ...
+            'CL',       {{'CL. Shear Strain (%)',               @(x)x * 100,        '%.0f', @min}}, ...
+            'CR',       {{'CR Shear Strain (%)',                @(x)x * 100,        '%.0f', @min}}, ...
+            'CURE',     {{'CURE',                               @(x)x,              '%.3f', @min}}, ...
+            'RURE',     {{'RURE',                               @(x)x,              '%.3f', @min}}, ...
+            'LURE',     {{'LURE',                               @(x)x,              '%.3f', @min}}, ...
+            'TORSION',  {{'Torsion (degrees)',                  @(x)x.CLShearAngle, '%.1f', @max}}, ...
+            'DELAY',    {{'Regional Delay (%CC)',               @(x)x.DelayTimes * 100,           '%.1f', @min}});
+    end
+
+    properties (Dependent = true)
+        Frames
+    end
+
+    properties (SetAccess = 'private', GetAccess = 'public')
+
+    end
+
+    methods
+        function res = get.Frames(self)
+            AI = [self.Data.Data.AnalysisInfo];
+            frames = [AI.FramesForAnalysis];
+            res = [max(frames(1,:)), min(frames(2,:))];
+        end
+
+        function clearCache(self)
+            self.cache = struct();
+        end
+
+        function res = fetchCache(self, key, func)
+            if ~isfield(self.cache, key)
+                self.cache.(key) = func();
+            end
+
+            res = self.cache.(key);
+        end
+
+        function self = DENSE3Dviewer(data, varargin)
+
+            fakedata = DENSEdata;
+            self = self@DataViewer(struct([]), fakedata, varargin{:});
+
+            % Assign the data object that we actually care about here
+            self.Data = data;
+
+            self.hlistener = addlistener(data, 'NewData', @(s,e)self.clearCache());
+
+            % Now set stuff up like we care
+            self.Handles.hbuttongroup = uibuttongroup( ...
+                'Parent', self.hcontrol, ...
+                'BorderType', 'none', ...
+                'Units', 'normalized', ...
+                'position', [0 0 1 1], ...
+                'SelectionChangeFcn', @(s,e)self.changeDisplay(e));
+
+            fcn = @(str, varargin)uicontrol( ...
+                'Parent', self.Handles.hbuttongroup, ...
+                'Style', 'radiobutton', ...
+                'Units', 'normalized', ...
+                'String', str, varargin{:});
+
+            buttons = struct([]);
+
+            buttons(end+1).String = '3D Mesh';
+            buttons(end).Fcn = @(s,e)showMesh(self);
+
+            buttons(end+1).String = 'Global Polar Strains';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'RR', 'CC', 'LL'});
+
+            buttons(end+1).String = 'Global Principal Strains';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'p1', 'p2', 'p3'});
+
+            buttons(end+1).String = 'Global Shear Strains';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'CL', 'CR', 'RL'});
+
+            buttons(end+1).String = 'Global Torsion';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'TORSION', 'CL'});
+
+            buttons(end+1).String = 'Polar Strain Bullseye';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'RR', 'CC', 'LL'});
+
+            buttons(end+1).String = 'Principal Strain Bullseye';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'p1', 'p2', 'p3'});
+
+            buttons(end+1).String = 'Shear Strain Bullseye';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'CL', 'CR', 'RL'});
+
+            buttons(end+1).String = 'Torsion Bullseye';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'TORSION'});
+
+            buttons(end+1).String = 'Regional Polar Strain';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'RR', 'CC', 'LL'}, 1);
+
+            buttons(end+1).String = 'Regional Principal Strain';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'p1', 'p2', 'p3'}, 1);
+
+            buttons(end+1).String = 'Regional Shear Strain';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'CL', 'CR', 'RL'}, 1);
+
+            buttons(end+1).String = 'Regional Torsion';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'TORSION', 'CL'}, 1);
+
+            buttons(end+1).String = 'Peak Polar Strain';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'RR', 'CC', 'LL'} , false);
+
+            buttons(end+1).String = 'Peak Principal Strain';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'p1', 'p2', 'p3'} , false);
+
+            buttons(end+1).String = 'Peak Torsion';
+            buttons(end).Fcn = @(s,e)showBullseye(self, {'TORSION'}, false);
+
+            buttons(end+1).String = 'CURE / RURE / LURE';
+            buttons(end).Fcn = @(s,e)showCurves(self, {'CURE', 'RURE', 'LURE'} , false);
+
+            buttons(end+1).String = 'Regional Delay Times';
+            buttons(end).Fcn = @(s,e)showBullseye(self, 'DELAY', false);
+
+            bottoms = linspace(0.2, 1, numel(buttons) + 1);
+            bottoms(end) = [];
+
+            buttons = flip(buttons);
+
+            for k = 1:numel(buttons)
+                pos = [0.05 bottoms(k) 0.9 diff(bottoms(1:2))];
+                buttons(k).Handle = fcn(buttons(k).String, 'Position', pos);
+            end
+
+            self.options = buttons;
+            self.api = self.template;
+
+            self.redrawenable = true;
+            redraw(self);
+
+            set(self.hdisplay, 'BackgroundColor', 'k')
+        end
+
+        function api = showBullseye(self, type, dynamic)
+
+            if ~exist('dynamic', 'var')
+                dynamic = true;
+            end
+
+            if isempty(self.Data.Strains)
+                self.computeStrains();
+            end
+
+            if ischar(type)
+                type = {type};
+            end
+
+
+            hax = NaN;
+            hpan = NaN;
+
+            import plugins.dense3D_plugin.*
+            hbull = Bullseye.empty();
+
+            api.initFcn = @initFcn;
+
+            if dynamic
+                api.playbackFcn = @playbackFcn;
+            else
+                api.playbackFcn = [];
+            end
+
+            strains = self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
+
+            api.deleteFcn = @deleteFcn;
+            api.resizeFcn = @resizeFcn;
+
+            function resizeFcn()
+                pos = getpixelposition(self.hdisplay);
+
+                pos(2) = pos(2) + 50;
+                pos(4) = pos(4) - 60;
+                pos(1) = 0;
+                pos(3) = diff(pos([1 3]));
+
+                setpixelposition(hpan, pos);
+            end
+
+
+            function deleteFcn()
+                if ishandle(hpan)
+                    delete(hpan)
+                end
+            end
+
+            function playbackFcn()
+                fr = self.hplaybar.Value;
+
+                for k = 1:numel(type)
+                    %mapping = self.mappings.(type{k});
+                    values = strains.(type{k});
+                    mx = max(abs(values(:)));
+                    values = values(:, fr);
+
+                    set(hax(k), 'CLim', [-mx mx])
+                    set(hbull(k), 'SegmentAverages', values);
+                end
+            end
+
+            function initFcn()
+                import plugins.dense3D_plugin.*
+                self.exportaxes = true;
+
+                hpan = uipanel( ...
+                    'Parent', self.hdisplay, ...
+                    'BorderType', 'none', ...
+                    'BackgroundColor', get(self.hdisplay, 'BackgroundColor'));
+
+                nAxes = numel(type);
+
+                for k = 1:nAxes
+                    hax(k) = subplot(1, nAxes, k, 'Parent', hpan);
+
+                    mapping = self.mappings.(type{k});
+
+
+                    if ~isfield(strains, type{k})
+                        strains.(type{k}) = mapping{2}(strains);
+                    else
+                        strains.(type{k}) = mapping{2}(strains.(type{k}));
+                    end
+
+                    title(hax(k), mapping{1}, 'Color', self.dispclr)
+                    values = mapping{4}(strains.(type{k}), [], 2);
+
+                    hbull(k) = Bullseye( ...
+                        'Parent', hax(k), ...
+                        'SegmentAverages', values, ...
+                        'Labels', 'on', ...
+                        'LabelFormat', mapping{3});
+
+                    %set(hbull, 'UIContextMenu', context);
+
+                    mx = max(abs(values));
+                    set(hax(k), 'CLim', [-mx mx], 'xtick', [], 'ytick', []);
+
+                    if ishg2
+                        colorbar(hax(k), 'Color', self.dispclr, 'FontWeight', 'bold', 'Location', 'southoutside')
+                    else
+                        colorbar('peer', hax(k), 'YColor', self.dispclr, 'XColor', self.dispclr, 'FontWeight', 'bold')
+                    end
+                end
+
+                colormap(bwr(65))
+
+                if dynamic
+                    frames = self.Frames;
+                    self.hplaybar.Min = frames(1);
+                    self.hplaybar.Max = frames(2);
+                    self.hplaybar.Enable = 'on';
+                    self.hlisten_playbar.Enabled = true;
+                    playbackFcn();
+                else
+                    self.hplaybar.Enable = 'off';
+                    self.hlisten_playbar.Enabled = false;
+                end
+
+
+                axis(hax, 'equal')
+                axis(hax, 'tight')
+                axis(hax, 'off')
+            end
+        end
+
+        function computeStrains(self)
+
+            hwait = waitbartimer();
+            hwait.String = 'Fitting Radial Basis Functions...';
+            hwait.WindowStyle = 'modal';
+            hwait.AllowClose = false;
+            hwait.Visible = 'on';
+            start(hwait);
+
+            drawnow
+
+            hclean = onCleanup(@()delete(hwait(isvalid(hwait))));
+
+            if isempty(self.Data.EndocardialMeshCut)
+                hwait.String = 'Rendering 3D Mesh...';
+                self.Data.generateMeshes();
+            end
+
+            function statusFcn(x, total)
+                fmt = 'Fitting Radial Basis Functions... (%d/%d)';
+                hwait.String = sprintf(fmt, x, total);
+                drawnow
+            end
+
+            self.Data.interpolate(@statusFcn);
+
+            drawnow
+
+            hwait.String = 'Parameterizing the ventricle...';
+
+            self.Data.radialSample();
+            self.Data.parameterize();
+
+            drawnow
+
+            hwait.String = 'Computing Strains...';
+
+            self.Data.computeStrains();
+            drawnow
+        end
+
+        function api = showCurves(self, type, regional)
+
+            if ~exist('regional', 'var')
+                regional = false;
+            end
+
+            if isempty(self.Data.Strains)
+                self.computeStrains();
+            end
+
+            if ischar(type)
+                type = {type};
+            end
+
+            strains = self.Data.Strains;
+
+            hax = NaN;
+            hpan = NaN;
+            hplot = {};
+            hbullax = NaN;
+            hbull = [];
+
+            api.initFcn = @initFcn;
+            api.playbackFcn = @playbackFcn;
+            api.deleteFcn = @deleteFcn;
+            api.resizeFcn = @resizeFcn;
+
+            function playbackFcn()
+
+                if isempty(hbull) || ~isvalid(hbull)
+                    return
+                end
+
+                nPlots = numel(hplot{1});
+
+                colors = num2cell(hsv(nPlots), 2);
+
+                visible = repmat({'on'}, nPlots, 1);
+                visible(~self.ActiveSegments) = {'off'};
+
+                cdata = get(hbull.hsurf, 'CData');
+                tf = ismember(cdata, find(~self.ActiveSegments));
+
+                alphadata = ones(size(tf));
+                alphadata(tf) = 0.3;
+
+                set(hbull.hsurf, 'FaceAlpha', 'flat', 'AlphaData', alphadata, 'AlphaDataMapping', 'none')
+
+                for k = 1:numel(hplot)
+                    set(hplot{k}, {'Color'}, colors, {'Visible'}, visible)
+                end
+
+                set(hbullax, 'clim', [1 nPlots])
+
+            end
+
+            function initFcn()
+                self.exportaxes = true;
+
+                hpan = uipanel( ...
+                    'Parent', self.hdisplay, ...
+                    'BorderType', 'none', ...
+                    'BackgroundColor', get(self.hdisplay, 'BackgroundColor'));
+
+                nAxes = numel(type);
+
+                hflow = uiflowcontainer('v0', ...
+                    'Parent', hpan, ...
+                    'FlowDirection', 'lefttoright', ...
+                    'BackgroundColor', get(self.hdisplay, 'BackgroundColor'));
+
+                if regional
+                    hbullax = axes( ...
+                        'Parent', hflow, ...
+                        'XTick', [], ...
+                        'YTick', [], ...
+                        'XLim', [-1.2 1.2], ...
+                        'YLim', [-1.2 1.2], ...
+                        'Color', 'none', ...
+                        'XColor', get(hflow, 'BackgroundColor'), ...
+                        'YColor', get(hflow, 'BackgroundColor'), ...
+                        'Visible', 'on');
+
+                    set(hbullax, 'WidthLimits', [250, 250])
+
+                    title(hbullax, 'Segment Model', ...
+                        'Color', self.dispclr, ...
+                        'FontWeight', 'bold');
+
+                    import plugins.dense3D_plugin.*
+
+                    hbull = Bullseye( ...
+                        'SegmentAverages', 1:17, ...
+                        'Labels', 'on', ...
+                        'LabelFormat', '%d', ...
+                        'Parent', hbullax, ...
+                        'ButtonDownFcn', @(s,e)clickBullseye(e));
+
+                    axis(hbullax, 'equal')
+                    axis(hbullax, 'tight')
+
+                    % Add some instructions
+                    msg = {
+                        'Click on a segment to toggle or'
+                        'double- or right-click to toggle all segments'
+                    };
+                    text(0, -1.3, msg, 'Parent', hbullax, 'HorizontalAlignment', 'center', ...
+                        'Color', self.dispclr);
+
+                    colormap(gcbf, hsv);
+                end
+
+                subpan = uipanel( ...
+                    'Parent', hflow, ...
+                    'BorderType', 'none', ...
+                    'BackgroundColor', get(self.hdisplay, 'BackgroundColor'));
+
+                strains = self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
+
+                hplot = cell(nAxes, 1);
+                hax = preAllocateGraphicsObjects(nAxes, 1);
+
+                for k = 1:nAxes
+
+                    mapping = self.mappings.(type{k});
+
+                    if ~isfield(strains, type{k})
+                        strains.(type{k}) = mapping{2}(strains);
+                    else
+                        strains.(type{k}) = mapping{2}(strains.(type{k}));
+                    end
+
+                    values = strains.(type{k});
+
+                    hax(k) = subplot(nAxes, 1, k, 'Parent', subpan, 'FontWeight', 'bold');
+                    ylabel(hax(k), mapping{1});
+                    xlabel(hax(k), 'Frame')
+
+                    if ~regional
+                        values = mean(values, 1);
+                    end
+
+                    hplot{k} = line(1:size(values, 2), values, 'Parent', hax(k));
+
+                    nPlots = numel(hplot{k});
+
+                    if numel(hplot{k}) > 1
+                        set(hplot{k}, {'Color'}, num2cell(hsv(nPlots), 2));
+                    else
+                        set(hplot{k}, 'Color', self.dispclr)
+                    end
+                end
+
+                set(hax, ...
+                    'Color', 'none', ...
+                    'box',  'on', ...
+                    'xcolor', self.dispclr(1,:), ...
+                    'xlim', [1, 1 + diff(self.Frames)], ...
+                    'ycolor', self.dispclr(1,:));
+
+                self.isAllowExportImage = true;
+                playbackFcn();
+            end
+
+            function clickBullseye(evnt)
+                switch lower(get(gcf, 'SelectionType'))
+                    case {'alt', 'open'}
+                        sz = size(self.ActiveSegments);
+                        if ~all(self.ActiveSegments)
+                            self.ActiveSegments = true(sz);
+                        else
+                            self.ActiveSegments = false(sz);
+                        end
+                    otherwise
+                        self.ActiveSegments(evnt.Segment) = ~self.ActiveSegments(evnt.Segment);
+                end
+
+
+                playbackFcn();
+            end
+
+            function resizeFcn()
+                % Get the position of the parent object
+                pos = getpixelposition(self.hdisplay);
+
+                pos(2) = pos(2) + 50;
+                pos(4) = pos(4) - 60;
+                pos(1) = 0;
+
+                pos(3) = diff(pos([1 3]));
+
+                setpixelposition(hpan, pos)
+
+                return;
+
+                % Now compute the position of the bullseye
+                if regional
+                    bpos = [0, (pos(4)/2) bullsize bullsize];
+
+                    setpixelposition(hbullax, bpos);
+                end
+            end
+
+            function deleteFcn()
+
+                if ishandle(hpan)
+                    delete(hpan)
+                end
+
+                if ishandle(hbullax)
+                    delete(hbullax)
+                end
+            end
+        end
+
+        function api = showMesh(self)
+
+            hax = NaN;
+            htitle = NaN;
+            hendo = NaN;
+            hepi = NaN;
+
+            meshes = cell(0,1);
+
+            api.initFcn     = @initFcn;
+            api.playbackFcn = @playbackFcn;
+            api.deleteFcn   = @deleteFcn;
+            api.resizeFcn   = @resizeFcn;
+
+            function initFcn()
+                self.exportaxes = true;
+
+                hax = axes('Parent', self.hdisplay);
+                htitle = title(hax, '3D Mesh', 'Color', self.dispclr);
+
+                set(hax, ...
+                    'Color', 'none', ...
+                    'box',  'on', ...
+                    'Visible', 'off', ...
+                    'xtick', [], ...
+                    'ytick', [], ...
+                    'Clipping', 'off', ...
+                    'FontWeight', 'bold', ...
+                    'xcolor', self.dispclr(1,:), ...
+                    'zcolor', self.dispclr(1,:), ...
+                    'ycolor', self.dispclr(1,:));
+
+                grid(hax, 'on')
+
+                if isempty(self.Data.EpicardialMeshCut)
+                    self.Data.generateMeshes();
+
+                    hwait = waitbartimer();
+                    hwait.String = 'Rendering 3D Mesh...';
+                    hwait.WindowStyle = 'modal';
+                    hwait.AllowClose = false;
+                    start(hwait);
+
+                    clean = onCleanup(@(x)delete(hwait(isvalid(hwait))));
+                    % uiwaitbar
+                    %
+                    pause(3)
+                end
+
+                meshes = {[self.Data.EpicardialMeshCut, self.Data.EndocardialMeshCut]};
+
+                hendo = patch( ...
+                    'Faces', self.Data.EndocardialMeshCut.faces, ...
+                    'Vertices', self.Data.EndocardialMeshCut.vertices, ...
+                    'FaceColor', 'w', ...
+                    'FaceAlpha', 0.5);
+
+                hold(hax, 'on')
+
+                hepi = patch( ...
+                    'Faces', self.Data.EpicardialMeshCut.faces, ...
+                    'Vertices', self.Data.EpicardialMeshCut.vertices, ...
+                    'FaceColor', 'w', ...
+                    'FaceAlpha', 0.5);
+
+                axis(hax, 'equal');
+
+                set(htitle, 'FontSize', 12, ...
+                    'Color', self.dispclr(1,:), ...
+                    'FontWeight', 'bold');
+
+                view(hax, 3);
+
+                % Enable rotation
+                hrot = rotate3d(self.hfigure_display);
+                hrot.setAllowAxesRotate(hax, true);
+
+                % Disable Contrast
+                self.hcontrast.setAllowAxes(hax, false);
+
+                % Set base zoom level
+                zoom(hax, 'reset');
+
+                frames = self.Frames;
+                self.hplaybar.Min = frames(1);
+                self.hplaybar.Max = frames(2);
+                self.hplaybar.Enable = 'on';
+
+                playbackFcn();
+
+                self.hlisten_playbar.Enabled = true;
+
+                self.isAllowExportImage = true;
+                if (self.hplaybar.Max - self.hplaybar.Min) > 1
+                    self.isAllowExportVideo = true;
+                end
+            end
+
+            function playbackFcn()
+                frame = self.hplaybar.Value;
+
+                if numel(meshes) < frame || isempty(meshes{frame})
+                    interp = self.Data.Interpolants(frame);
+
+                    % Interpolate the epicardial surface
+                    epi = self.Data.EpicardialMeshCut;
+                    epi.vertices = epi.vertices + interp.query(epi.vertices);
+
+                    endo = self.Data.EndocardialMeshCut;
+                    endo.vertices = endo.vertices + interp.query(endo.vertices);
+
+                    meshes{frame} = [epi, endo];
+                end
+
+                msh = meshes{frame};
+
+                set(hepi, msh(1))
+                set(hendo, msh(2));
+
+                drawnow
+            end
+
+            function deleteFcn()
+                delete(hax(ishandle(hax)));
+            end
+        end
+
+        function redraw(self)
+            redraw@DataViewer(self);
+        end
+
+        function changeDisplay(self, evnt)
+
+            if isequal(evnt.NewValue, evnt.OldValue)
+                return;
+            end
+
+            % Reset
+            reset(self)
+
+            [tf, ind] = ismember(evnt.NewValue, [self.options.Handle]);
+
+            if ~tf
+                return;
+            end
+
+            % Initialize the object
+            try
+                API = self.options(ind).Fcn(self);
+                API.initFcn();
+            catch ERR
+                if exist('API', 'var') && isstruct(API) && ~isempty(API.deleteFcn)
+                    API.deleteFcn();
+                end
+
+                self.api = self.template;
+
+                rethrow(ERR);
+            end
+
+            self.api = API;
+
+            if isempty(API.playbackFcn)
+                self.hplaybar.Visible = 'off';
+            else
+                self.hplaybar.Visible = 'on';
+            end
+
+            redraw(self);
+        end
+    end
+
+
+
+    methods (Access = 'protected')
+
+        function resize(self)
+            resize@DataViewer(self);
+            if ~isempty(self.api.resizeFcn)
+                try
+                    self.api.resizeFcn();
+                catch
+                    self.api.resizeFcn = [];
+                end
+            end
+        end
+
+        function playback(self)
+            if ~isempty(self.api.playbackFcn)
+                self.api.playbackFcn();
+            end
+        end
+
+        function reset(self)
+            self.hlisten_playbar.Enabled = false;
+            stop(self.hplaybar);
+            self.hplaybar.Min = 1;
+            self.hplaybar.Max = 0;
+            self.hplaybar.Visible = 'off';
+
+            if ~isempty(self.api.deleteFcn)
+                self.api.deleteFcn();
+            end
+
+            self.api = self.template;
+
+            self.exportaxes = false;
+            self.exportrect = [];
+            self.isAllowExportImage = false;
+            self.isAllowExportVideo = false;
+        end
+    end
+end
+

@@ -52,10 +52,10 @@ classdef RBFInterpolator < hgsetget
         Normalized  = false % Is this a normalized RBF system
 
         % Type of radial basis function to use (function handle)
-        Type        = RBFInterpolator.LINEAR
+        Type        = []
     end
 
-    properties (Access = 'protected')
+    properties (Hidden)
         Weights    = []    % Computed weights for basis functions
     end
 
@@ -68,7 +68,7 @@ classdef RBFInterpolator < hgsetget
         THINPLATE       = @(r,const)RBFInterpolator.thinplate(r);
         CUBIC           = @(r,const)RBFInterpolator.cubic(r);
         MULTIQUADRICS   = @(r,const)RBFInterpolator.multiquadrics(r, const);
-        LINEAR          = @(r,const)RBFInterpolator.linear(r);
+        LINEAR          = @(r,const)r;
     end
 
     methods
@@ -133,6 +133,8 @@ classdef RBFInterpolator < hgsetget
             %   R:      RBFInterpolator, object handle to be used to
             %           perform interpolation.
 
+            self.Type = self.LINEAR;
+
             self.Points = pts;
             self.Data = vals;
 
@@ -177,6 +179,13 @@ classdef RBFInterpolator < hgsetget
             P = [ones(self.NPoints, 1) self.Points];
             A = [A  P; P' zeros(dims + 1, dims + 1)];
             B = [self.Data; zeros(dims + 1, size(self.Data, 2))];
+
+            %[U,S,V] = svd(A.' * A);
+            %inds = eye(size(S)) & S ~= 0;
+            %S(inds) = 1 ./ S(inds);
+
+            %self.Weights = V * S.' * U.' * A.' * B;
+            %return
 
             self.Weights = A \ B;
         end
@@ -230,19 +239,20 @@ classdef RBFInterpolator < hgsetget
             res = (queries * self.Weights(nNodes + 2 : end,:)) + S;
         end
 
-        function varargout = subsref(self, S)
+        %function varargout = subsref(self, S)
             % subsref - Overloaded subscript referencing
             %
             %   This is overloaded because we want to be able to use
             %   indices to interpolate the RBF
 
-            switch S(1).type
-                case '()'
-                    [varargout{1:nargout}] = query(self, S(1).subs{:});
-                otherwise
-                    [varargout{1:nargout}] = builtin('subsref', self, S);
-            end
-        end
+         %   keyboard
+         %   switch S(1).type
+         %       case '()'
+          %          [varargout{1:nargout}] = query(self, S(1).subs{:});
+          %      otherwise
+          %          [varargout{1:nargout}] = builtin('subsref', self, S);
+          %  end
+        %end
     end
 
     %-- Get / Set Methods --%
