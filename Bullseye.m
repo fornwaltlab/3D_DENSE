@@ -140,7 +140,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                 parent = gca;
             end
 
-            self@HGParrot(hggroup('Parent', parent))
+            self@plugins.dense3D_plugin.HGParrot(hggroup('Parent', parent))
             self.Type = 'Bullseye';
 
             set(self.Handle, 'ButtonDownFcn', @(s,e)buttonDown(self));
@@ -250,7 +250,9 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             X = cat(1, X(:), tmpx(:));
             Y = cat(1, Y(:), tmpy(:));
 
-            set(self.haha, 'XData', X(:), 'YData', Y(:));
+            Z = zeros(size(X)) + self.ZData + 0.01;
+
+            set(self.haha, 'XData', X(:), 'YData', Y(:), 'ZData', Z(:));
 
             sz = max(size(self.CData), [120, 12]);
 
@@ -279,6 +281,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
             % Update the label positions if necessary
             centers = self.segmentCenters;
+            centers(:,end+1) = self.ZData + 0.01;
 
             % If the LabelFormat is a function handle
             if isa(self.LabelFormat, 'function_handle')
@@ -293,7 +296,8 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                 labels{end+1} = '';
             end
 
-            set(self.htext, {'Position'}, num2cell(centers, 2), ...
+            set(self.htext, ...
+                {'Position'}, num2cell(centers, 2), ...
                 {'String'}, labels);
 
         end
