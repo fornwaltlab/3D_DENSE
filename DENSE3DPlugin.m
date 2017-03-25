@@ -52,7 +52,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
 
             self.Handles.hpopup = uipanel( ...
                 'Parent',   self.hpanel, ...
-                'Position', [0 0 150 200]);
+                'Position', [0 0 150 150]);
 
             self.Handles.hpanel = uipanel( ...
                 'Parent',           self.hpanel, ...
@@ -67,7 +67,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             h.hpopup.addTab('3D Workspaces', self.Handles.hpopup);
             self.Handles.PopupIndex = h.hpopup.NumberOfTabs;
 
-            h.hpopup.PanelHeights(self.Handles.PopupIndex) = 200;
+            h.hpopup.PanelHeights(self.Handles.PopupIndex) = 150;
 
             self.Handles.hlist = uicontrol( ...
                 'Parent',   self.Handles.hpopup, ...
@@ -98,7 +98,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
 
             h.hpopup.addTab('3D Options', self.Handles.hoptions);
             self.Handles.PopupIndex(end+1) = h.hpopup.NumberOfTabs;
-            h.hpopup.PanelHeights(self.Handles.PopupIndex(end)) = 100;
+            h.hpopup.PanelHeights(self.Handles.PopupIndex(end)) = 80;
 
             h.hpopup.addTab('3D Results', self.Handles.hresults);
             self.Handles.PopupIndex(end+1) = h.hpopup.NumberOfTabs;
@@ -137,7 +137,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Style', 'checkbox', ...
                 'String', 'Flip Ventricle');
 
-            h.hpopup.PanelHeights(self.Handles.PopupIndex(end)) = 200;
+            h.hpopup.PanelHeights(self.Handles.PopupIndex(end)) = 350;
 
             [h.hpopup.Visible{self.Handles.PopupIndex}] = deal('off');
 
