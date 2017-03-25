@@ -176,13 +176,16 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             delete(self.Handles.TabListener);
 
             if ishghandle(self.hfig)
-                h = guidata(self.hfig);
-                h.hsidebar.removeTab(self.Handles.TabIndex);
-                h.hpopup.removeTab(self.Handles.hpopup);
+                % Only worry about removing tabs etc. if the figure is not
+                % going to be deleted anyhow
+                if strcmpi(get(self.hfig, 'BeingDeleted'), 'off')
+                    h = guidata(self.hfig);
+                    h.hsidebar.removeTab(self.Handles.TabIndex);
+                    h.hpopup.removeTab(self.Handles.hpopup);
+                end
 
                 % Call superclass destructor
                 delete@plugins.DENSEanalysisPlugin(self);
-
             end
         end
 
