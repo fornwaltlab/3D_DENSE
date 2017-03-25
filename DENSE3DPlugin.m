@@ -178,10 +178,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             if ishghandle(self.hfig)
                 h = guidata(self.hfig);
                 h.hsidebar.removeTab(self.Handles.TabIndex);
-                %h.hpopup.removeTab(self.Handles.PopupIndex);
-
-                delete(self.Handles.hpanel)
-                delete(self.Handles.hpopup)
+                h.hpopup.removeTab(self.Handles.hpopup);
 
                 % Call superclass destructor
                 delete@plugins.DENSEanalysisPlugin(self);
