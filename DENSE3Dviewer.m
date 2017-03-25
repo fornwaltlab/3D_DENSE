@@ -17,6 +17,11 @@ classdef DENSE3Dviewer < DataViewer
         Handles
         Data
         ActiveSegments = true(1, 17);
+        LineAppearance = struct('LineWidth', 2);
+        AxesAppearance = struct( ...
+            'LineWidth',    2, ...
+            'FontWeight',   'bold', ...
+            'FontSize', 12)
     end
 
     properties (Hidden)
@@ -162,7 +167,7 @@ classdef DENSE3Dviewer < DataViewer
             buttons(end+1).String = 'Regional Delay Times';
             buttons(end).Fcn = @(s,e)showBullseye(self, 'DELAY', false);
 
-            bottoms = linspace(0.2, 1, numel(buttons) + 1);
+            bottoms = linspace(0, 1, numel(buttons) + 1);
             bottoms(end) = [];
 
             buttons = flip(buttons);
@@ -259,7 +264,13 @@ classdef DENSE3Dviewer < DataViewer
                 nAxes = numel(type);
 
                 for k = 1:nAxes
-                    hax(k) = subplot(1, nAxes, k, 'Parent', hpan);
+                    hax(k) = axes( ...
+                        'Parent',       hpan, ...
+                        self.AxesAppearance);
+
+                    set(hax(k), ...
+                        'LooseInset',       [0.05 0.05 0.05 0.05], ...
+                        'OuterPosition',    [(k-1)/nAxes, 0 (1/nAxes) 1])
 
                     mapping = self.mappings.(type{k});
 
@@ -285,9 +296,20 @@ classdef DENSE3Dviewer < DataViewer
                     set(hax(k), 'CLim', [-mx mx], 'xtick', [], 'ytick', []);
 
                     if ishg2
-                        colorbar(hax(k), 'Color', self.dispclr, 'FontWeight', 'bold', 'Location', 'southoutside')
+                        colorbar(hax(k), ...
+                            'Color', self.dispclr, ...
+                            'FontWeight', 'bold', ...
+                            'FontSize', 12, ...
+                            'LineWidth', 2, ...
+                            'Location', 'southoutside')
                     else
-                        colorbar('peer', hax(k), 'YColor', self.dispclr, 'XColor', self.dispclr, 'FontWeight', 'bold')
+                        colorbar('peer', hax(k), ...
+                            'YColor', self.dispclr, ...
+                            'XColor', self.dispclr, ...
+                            'FontWeight', 'bold', ...
+                            'FontSize', 12, ...
+                            'LineWidth', 2, ...
+                            'Location', 'southoutside')
                     end
                 end
 
@@ -487,7 +509,10 @@ classdef DENSE3Dviewer < DataViewer
 
                     values = strains.(type{k});
 
-                    hax(k) = subplot(nAxes, 1, k, 'Parent', subpan, 'FontWeight', 'bold');
+                    hax(k) = subplot(nAxes, 1, k, ...
+                        'Parent',       subpan, ...
+                        self.AxesAppearance);
+
                     ylabel(hax(k), mapping{1});
                     xlabel(hax(k), 'Frame')
 
@@ -495,7 +520,7 @@ classdef DENSE3Dviewer < DataViewer
                         values = mean(values, 1);
                     end
 
-                    hplot{k} = line(1:size(values, 2), values, 'Parent', hax(k));
+                    hplot{k} = line(1:size(values, 2), values, 'Parent', hax(k), self.LineAppearance);
 
                     nPlots = numel(hplot{k});
 
