@@ -294,23 +294,21 @@ classdef DENSE3Dviewer < DataViewer
 
                     mx = max(abs(values));
                     set(hax(k), 'CLim', [-mx mx], 'xtick', [], 'ytick', []);
-
+                    
                     if ishg2
-                        colorbar(hax(k), ...
-                            'Color', self.dispclr, ...
-                            'FontWeight', 'bold', ...
-                            'FontSize', 12, ...
-                            'LineWidth', 2, ...
-                            'Location', 'southoutside')
+                        cb = colorbar(handle(hax(k)));
+                        set(cb, 'Color', self.dispclr);
                     else
-                        colorbar('peer', hax(k), ...
-                            'YColor', self.dispclr, ...
-                            'XColor', self.dispclr, ...
+                        cb = colorbar('peer', hax(k));
+                        set(cb, 'XColor', self.dispclr, ...
+                            'YColor', self.dispclr)
+                    end
+                    
+                    set(cb, ...
                             'FontWeight', 'bold', ...
                             'FontSize', 12, ...
                             'LineWidth', 2, ...
                             'Location', 'southoutside')
-                    end
                 end
 
                 colormap(bwr(65))
@@ -372,6 +370,10 @@ classdef DENSE3Dviewer < DataViewer
             hwait.String = 'Computing Strains...';
 
             self.Data.computeStrains();
+            
+            % Go ahead and fetch the regional strains
+            self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
+
             drawnow
         end
 
@@ -495,7 +497,7 @@ classdef DENSE3Dviewer < DataViewer
                 strains = self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
 
                 hplot = cell(nAxes, 1);
-                hax = preAllocateGraphicsObjects(nAxes, 1);
+                hax = gobjects(nAxes, 1);
 
                 for k = 1:nAxes
 
@@ -509,9 +511,8 @@ classdef DENSE3Dviewer < DataViewer
 
                     values = strains.(type{k});
 
-                    hax(k) = subplot(nAxes, 1, k, ...
-                        'Parent',       subpan, ...
-                        self.AxesAppearance);
+                    hax(k) = subplot(nAxes, 1, k, 'Parent', subpan);
+                    set(hax(k), self.AxesAppearance);
 
                     ylabel(hax(k), mapping{1});
                     xlabel(hax(k), 'Frame')
