@@ -6,7 +6,6 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
     % Copyright (c) 2016, Jonathan Suever
 
     properties
-        hfig
         hpanel
         Handles
         hdense
@@ -17,11 +16,6 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
         function self = DENSE3DPlugin(varargin)
             import plugins.dense3D_plugin.*
             self@plugins.DENSEanalysisPlugin(varargin{:});
-
-            self.hfig = findall(0, ...
-                'Type', 'figure', ...
-                'Name', 'DENSEanalysis', ...
-                'tag', 'hfig');
 
             self.hdense = DENSE3D();
 
@@ -34,6 +28,10 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             end
         end
 
+        function h = uimenu(self, varargin)
+            h = gobjects(1,1);
+        end
+
         function refresh(self)
             hlist = self.Handles.hlist;
             newstrs = {self.hdense.Data.Description};
@@ -43,31 +41,20 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
 
         function initGUI(self)
             import plugins.dense3D_plugin.*
+
             h = guidata(self.hfig);
 
-            self.hpanel = uipanel('Parent', self.hfig);
-            h.hsidebar.addTab({'3D DENSE', 'Analysis'}, self.hpanel);
+            label = {'3D DENSE', 'Analysis'};
+            [self.Handles.TabIndex, self.hpanel] = self.addTab(label);
 
-            self.Handles.TabIndex = h.hsidebar.NumberOfTabs;
-
-            self.Handles.hpopup = uipanel( ...
-                'Parent',   self.hpanel, ...
-                'Position', [0 0 150 150]);
+            [~, self.Handles.hpopup] = self.addPopup('3D Workspaces', 150);
+            [~, self.Handles.hoptions] = self.addPopup('3D Options', 80);
+            [~, self.Handles.hresults] = self.addPopup('3D Results', 350);
 
             self.Handles.hpanel = uipanel( ...
                 'Parent',           self.hpanel, ...
                 'BorderType',       'none', ...
                 'BackgroundColor',  [0 0 0]);
-
-            self.Handles.hpopup = uipanel( ...
-                'Units',    'pixels', ...
-                'Position', [0 0 200 200], ...
-                'Parent',   self.hpanel);
-
-            h.hpopup.addTab('3D Workspaces', self.Handles.hpopup);
-            self.Handles.PopupIndex = h.hpopup.NumberOfTabs;
-
-            h.hpopup.PanelHeights(self.Handles.PopupIndex) = 150;
 
             self.Handles.hlist = uicontrol( ...
                 'Parent',   self.Handles.hpopup, ...
@@ -91,17 +78,6 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Units',    'Normalized', ...
                 'Callback', @(s,e)self.removeCallback(), ...
                 'Position', [0.525 0.05 0.425 0.15]);
-
-            % Now add a popup for display options
-            self.Handles.hresults = uipanel('Parent', self.hpanel);
-            self.Handles.hoptions = uipanel('Parent', self.hpanel);
-
-            h.hpopup.addTab('3D Options', self.Handles.hoptions);
-            self.Handles.PopupIndex(end+1) = h.hpopup.NumberOfTabs;
-            h.hpopup.PanelHeights(self.Handles.PopupIndex(end)) = 80;
-
-            h.hpopup.addTab('3D Results', self.Handles.hresults);
-            self.Handles.PopupIndex(end+1) = h.hpopup.NumberOfTabs;
 
             self.Handles.hviewer = DENSE3Dviewer( ...
                 self.hdense, ...
@@ -136,27 +112,6 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Position', [0.05 bottoms(3) 0.9 height], ...
                 'Style', 'checkbox', ...
                 'String', 'Flip Ventricle');
-
-            h.hpopup.PanelHeights(self.Handles.PopupIndex(end)) = 350;
-
-            [h.hpopup.Visible{self.Handles.PopupIndex}] = deal('off');
-
-            % Add a listener to the tabs
-            self.Handles.TabListener = addlistener(h.hsidebar, ...
-                'SwitchTab', @(s,e)tab(s));
-
-            function tab(src)
-                if src.ActiveTab == self.Handles.TabIndex
-                    self.Handles.state = h.hpopup.Visible;
-                    h.hpopup.Visible = repmat({'off'}, size(h.hpopup.Visible));
-                    [h.hpopup.Visible{self.Handles.PopupIndex}] = deal('on');
-                else
-                    if isfield(self.Handles, 'state')
-                        h.hpopup.Visible = self.Handles.state;
-                    end
-                    [h.hpopup.Visible{self.Handles.PopupIndex}] = deal('off');
-                end
-            end
         end
 
         function removeCallback(self)
@@ -173,15 +128,16 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 delete(self.hpanel)
             end
 
-            delete(self.Handles.TabListener);
+            %delete(self.Handles.TabListener);
 
             if ishghandle(self.hfig)
                 % Only worry about removing tabs etc. if the figure is not
                 % going to be deleted anyhow
                 if strcmpi(get(self.hfig, 'BeingDeleted'), 'off')
                     h = guidata(self.hfig);
-                    h.hsidebar.removeTab(self.Handles.TabIndex);
                     h.hpopup.removeTab(self.Handles.hpopup);
+                    h.hpopup.removeTab(self.Handles.hresults);
+                    h.hpopup.removeTab(self.Handles.hoptions);
                 end
 
                 % Call superclass destructor
@@ -189,7 +145,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             end
         end
 
-        function validate(~, data)
+        function validate(varargin)
             % validate - Check if the plugin can run.
             %
             %   Performs validation to ensure that the state of the program
@@ -201,18 +157,9 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             % INPUTS:
             %   data:   Object, DENSEdata object containing all underlying
             %           data from the DENSEanalysis program.
-
-            % Assert that image data base been loaded
-            assert(~isempty(data.seq), ...
-                'You must load imaging data into DENSEanalysis first.')
-
-            % Make sure that we are dealing with 3D-encoded data
-            is3D = ~cellfun(@(x)any(isnan(x)), {data.dns.PhaIndex});
-            assert(any(is3D), ...
-                '3D Analysis can only be run on 3D-encoded data.');
         end
 
-        function run(self, data)
+        function run(varargin)
             % run - Method executed when user selects the plugin
             %
             % USAGE:
