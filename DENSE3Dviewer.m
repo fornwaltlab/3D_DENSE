@@ -87,6 +87,22 @@ classdef DENSE3Dviewer < DataViewer
             res = self.cache.(key);
         end
 
+        function newDataCallback(self)
+            self.clearCache();
+
+            % Check to see if we want to enable the buttons
+            if ~isempty(self.Data.Data)
+                set([self.options.Handle], 'Enable', 'on')
+            else
+                set([self.options.Handle], 'Enable', 'off')
+            end
+
+            set([self.options.Handle], 'Value', 0)
+
+            % Now hide everything
+            reset(self)
+        end
+
         function self = DENSE3Dviewer(data, varargin)
 
             fakedata = DENSEdata;
@@ -95,7 +111,7 @@ classdef DENSE3Dviewer < DataViewer
             % Assign the data object that we actually care about here
             self.Data = data;
 
-            self.hlistener = addlistener(data, 'NewData', @(s,e)self.clearCache());
+            self.hlistener = addlistener(data, 'NewData', @(s,e)self.newDataCallback());
 
             % Now set stuff up like we care
             self.Handles.hbuttongroup = uibuttongroup( ...
@@ -109,6 +125,8 @@ classdef DENSE3Dviewer < DataViewer
                 'Parent', self.Handles.hbuttongroup, ...
                 'Style', 'radiobutton', ...
                 'Units', 'normalized', ...
+                'Enable', 'off', ...
+                'Value', 0, ...
                 'String', str, varargin{:});
 
             buttons = struct([]);
@@ -178,6 +196,9 @@ classdef DENSE3Dviewer < DataViewer
             end
 
             self.options = buttons;
+
+            set([self.options.Handle], 'Value', 0);
+
             self.api = self.template;
 
             self.redrawenable = true;
@@ -242,7 +263,6 @@ classdef DENSE3Dviewer < DataViewer
                 fr = self.hplaybar.Value;
 
                 for k = 1:numel(type)
-                    %mapping = self.mappings.(type{k});
                     values = strains.(type{k});
                     mx = max(abs(values(:)));
                     values = values(:, fr);
@@ -294,7 +314,7 @@ classdef DENSE3Dviewer < DataViewer
 
                     mx = max(abs(values));
                     set(hax(k), 'CLim', [-mx mx], 'xtick', [], 'ytick', []);
-                    
+
                     if ishg2
                         cb = colorbar(handle(hax(k)));
                         set(cb, 'Color', self.dispclr);
@@ -303,7 +323,7 @@ classdef DENSE3Dviewer < DataViewer
                         set(cb, 'XColor', self.dispclr, ...
                             'YColor', self.dispclr)
                     end
-                    
+
                     set(cb, ...
                             'FontWeight', 'bold', ...
                             'FontSize', 12, ...
@@ -370,7 +390,7 @@ classdef DENSE3Dviewer < DataViewer
             hwait.String = 'Computing Strains...';
 
             self.Data.computeStrains();
-            
+
             % Go ahead and fetch the regional strains
             self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
 
@@ -481,7 +501,7 @@ classdef DENSE3Dviewer < DataViewer
                     % Add some instructions
                     msg = {
                         'Click on a segment to toggle or'
-                        'double- or right-click to toggle all segments'
+                        'right-click to toggle all segments'
                     };
                     text(0, -1.3, msg, 'Parent', hbullax, 'HorizontalAlignment', 'center', ...
                         'Color', self.dispclr);
@@ -518,7 +538,7 @@ classdef DENSE3Dviewer < DataViewer
                     xlabel(hax(k), 'Frame')
 
                     if ~regional
-                        values = mean(values, 1);
+                        values = mean(values(~any(isnan(values), 2), :), 1);
                     end
 
                     hplot{k} = line(1:size(values, 2), values, 'Parent', hax(k), self.LineAppearance);
@@ -545,7 +565,7 @@ classdef DENSE3Dviewer < DataViewer
 
             function clickBullseye(evnt)
                 switch lower(get(gcf, 'SelectionType'))
-                    case {'alt', 'open'}
+                    case 'alt'
                         sz = size(self.ActiveSegments);
                         if ~all(self.ActiveSegments)
                             self.ActiveSegments = true(sz);
@@ -571,15 +591,6 @@ classdef DENSE3Dviewer < DataViewer
                 pos(3) = diff(pos([1 3]));
 
                 setpixelposition(hpan, pos)
-
-                return;
-
-                % Now compute the position of the bullseye
-                if regional
-                    bpos = [0, (pos(4)/2) bullsize bullsize];
-
-                    setpixelposition(hbullax, bpos);
-                end
             end
 
             function deleteFcn()
@@ -638,8 +649,6 @@ classdef DENSE3Dviewer < DataViewer
                     start(hwait);
 
                     clean = onCleanup(@(x)delete(hwait(isvalid(hwait))));
-                    % uiwaitbar
-                    %
                     pause(3)
                 end
 
