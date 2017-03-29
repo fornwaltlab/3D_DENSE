@@ -658,7 +658,8 @@ classdef DENSE3Dviewer < DataViewer
                     'Faces', self.Data.EndocardialMeshCut.faces, ...
                     'Vertices', self.Data.EndocardialMeshCut.vertices, ...
                     'FaceColor', 'w', ...
-                    'FaceAlpha', 0.5);
+                    'FaceAlpha', 0.5, ...
+                    'Parent', hax);
 
                 hold(hax, 'on')
 
@@ -666,6 +667,7 @@ classdef DENSE3Dviewer < DataViewer
                     'Faces', self.Data.EpicardialMeshCut.faces, ...
                     'Vertices', self.Data.EpicardialMeshCut.vertices, ...
                     'FaceColor', 'w', ...
+                    'Parent', hax, ...
                     'FaceAlpha', 0.5);
 
                 axis(hax, 'equal');
@@ -675,6 +677,8 @@ classdef DENSE3Dviewer < DataViewer
                     'FontWeight', 'bold');
 
                 view(hax, 3);
+
+                set(hax, 'Position', [0 0 1 1])
 
                 % Enable rotation
                 hrot = rotate3d(self.hfigure_display);
