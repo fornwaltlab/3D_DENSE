@@ -9,6 +9,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
         hpanel
         Handles
         hdense
+        guistate
     end
 
     methods
@@ -123,6 +124,31 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Style', 'checkbox', ...
                 'Callback', @(s,e)set(self.hdense, 'Flip', get(s, 'Value')), ...
                 'String', 'Flip Ventricle');
+        end
+
+        function activateUI(self, hdata)
+            % Make sure that the 3D rotation tool is turned on
+            activateUI@plugins.DENSEanalysisPlugin(self, hdata);
+
+            % Store the state of all tools
+            self.guistate.Enable = get(hdata.htools, 'Enable');
+
+            tags = {'Exploration.Rotate3d', 'Exploration.Pan', 'Exploration.ZoomOut', 'ZoomIn'};
+
+            % Disable everything by default
+            set(hdata.htools, 'Enable', 'off')
+
+            for k = 1:numel(tags)
+                set(findobj(hdata.htools, 'tag', tags{k}), 'Enable', 'on')
+            end
+        end
+
+        function deactivateUI(self, hdata)
+            deactivateUI@plugins.DENSEanalysisPlugin(self, hdata);
+
+            if ~isempty(self.guistate)
+                set(hdata.htools, {'Enable'}, self.guistate.Enable)
+            end
         end
 
         function addCallback(self)
