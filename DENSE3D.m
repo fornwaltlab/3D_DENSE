@@ -1,4 +1,4 @@
-classdef DENSE3D < handle
+classdef DENSE3D < hgsetget
 
     % TODO: Add APEX label to the slice that was determined automatically
     % to be the apex
@@ -8,7 +8,6 @@ classdef DENSE3D < handle
 
     properties
         Apex
-        Data            % Contains all data loaded from .mat files
         Parameterization
         EndocardialMesh
         EndocardialMeshCut
@@ -19,6 +18,15 @@ classdef DENSE3D < handle
         RadialParams
         RBFParameters   % Parameters to use when fitting RBFs to the data
         Strains
+        Flip = false
+    end
+
+    properties (Dependent)
+        Data
+    end
+
+    properties (Hidden)
+        data
     end
 
     events
@@ -28,10 +36,65 @@ classdef DENSE3D < handle
     methods
 
         function set.Data(self, value)
-            self.Data = value;
-            notify(self, 'NewData');
+            % Make sure that the data is unique such that there are no two
+            % elements with the same SeriesInstanceUID
+
+            if isempty(value)
+                self.data = [];
+                reset(self);
+                return
+            end
+
+            seqs = arrayfun(@(x)x.SequenceInfo(1), value);
+            if numel(seqs) > numel(unique({seqs.SeriesInstanceUID}))
+                error(sprintf('%s:InvalidData', mfilename), ...
+                    'There is duplicate data present')
+            end
+
+            seqs = arrayfun(@(x)x.SequenceInfo(1), value);
+            [~, sortind] = sort([seqs.SliceLocation]);
+
+            self.data = value(sortind);
+
+            reset(self);
         end
 
+        function reset(self)
+            % reset - Resets all of the computed parameters because there
+            % is either new data added or the ordering of the base/apex has
+            % changed
+
+            self.EndocardialMesh = [];
+            self.EndocardialMeshCut = [];
+            self.EpicardialMesh = [];
+            self.EpicardialMeshCut = [];
+            self.Interpolants = [];
+            self.LocalCoordinates = [];
+            self.RadialParams = [];
+            self.RBFParameters = [];
+            self.Strains = [];
+            self.Parameterization = [];
+            self.Apex = [];
+
+            notify(self, 'NewData')
+        end
+
+        function set.Flip(self, value)
+            self.Flip = value;
+            reset(self);
+        end
+
+        function res = get.Data(self)
+            if self.Flip
+                res = flip(self.data);
+            else
+                res = self.data;
+            end
+        end
+
+        function index = apicalSlice(self)
+            index = numel(self.Data);
+        end
 
         function movie(self)
 
@@ -54,11 +117,6 @@ classdef DENSE3D < handle
 
             axis equal
             axis manual
-
-
-            %hplot = plot3(NaN, NaN, NaN, '.');
-
-            axis equal;
 
             for k = 1:1000
 
@@ -106,10 +164,6 @@ classdef DENSE3D < handle
             axis equal
 
             hold on
-
-            %XYZ = self.RadialParams.Points;
-
-            %s = scatter3(XYZ(:,1), XYZ(:,2), XYZ(:,3), 'Marker', '.', 'CData', self.RadialParams.Laplacian);
         end
 
         function output = regionalStrains(self, nSegments)
@@ -359,50 +413,12 @@ classdef DENSE3D < handle
             end
         end
 
-        function bullseye(self, field)
-
-            % Get the regional strain information using the bwr colormap
-            cmap = bwr(100);
-
-            % Retrieve the peak values for this
-            data = self.peakStrains.(field);
-
-            % Convert to RGB values for display
-            mx = max(abs(data));
-            data = (data + mx) ./ (2 * mx);
-            rgb = ind2rgb(gray2ind(data, 100), bwr(100));
-
-            data(1).SegmentModel = 4;
-            data(1).NumberOfSegments = 4;
-            data(1).NumberOfLayers = 1;
-            data(1).Text = {'Anterior', 'Septal', 'Inferior', 'Lateral'};
-            data(1).SegmentEdgeColor = 'none';
-
-            data(end+1).SegmentModel = 6;
-            data(end).NumberOfSegments = 6;
-            data(end).NumberOfLayers = 1;
-            data(end).Color = rgb(1:6,:);
-
-            data(end+1).SegmentModel = 6;
-            data(end).NumberOfSegments = 6;
-            data(end).NumberOfLayers = 1;
-            data(end).Color = rgb(7:12,:);
-
-            data(end+1).SegmentModel = 4;
-            data(end).NumberOfSegments = 4;
-            data(end).NumberOfLayers = 1;
-            data(end).Color = rgb(13:16,:);
-
-            dense_bullseye(figure, data);
-
-            colormap(cmap);
-            set(gca, 'clim', [-mx mx]);
-            colorbar
-
-        end
-
         function [base, baseindex] = basalSlice(self)
             % basalSlice - Returns information about the basal slice
+
+            baseindex = 1;
+            base = self.Data(baseindex).SequenceInfo(1);
+            return
 
             seqs = arrayfun(@(x)x.SequenceInfo(1), [self.Data]);
             parallelids = [seqs.parallelid];
@@ -452,17 +468,8 @@ classdef DENSE3D < handle
             verts = bsxfun(@plus, demeaned * R, center);
             epi.vertices = verts;
 
-            %{
-            figure
-            patch('Faces', epi.faces, 'Vertices', verts, 'FaceColor', 'w');
-            view(3)
-            hold on
-            %}
-
             demeaned = bsxfun(@minus, endo.vertices, center);
             verts = bsxfun(@plus, demeaned * R, center);
-
-            %patch('Faces', endo.faces, 'Vertices', verts, 'FaceColor', 'w');
 
             endo.vertices = verts;
 
@@ -495,8 +502,6 @@ classdef DENSE3D < handle
             Y = yy(ismyo);
             Z = zz(ismyo);
             L = laplacian(ismyo);
-
-            %scatter3(X, Y, Z, 'CData', L)
 
             % Convert these back to their normal coordinates
             XYZ = [X, Y, Z];
@@ -546,16 +551,6 @@ classdef DENSE3D < handle
 
             self.Parameterization.Longitudinal = long;
 
-            %{
-            figure
-            p = patch('Faces', msh.faces, ...
-                      'Vertices', msh.vertices, ...
-                      'FaceColor', 'interp', ...
-                      'FaceVertexCData', L);
-            %}
-            %
-            %L = 1 - L;
-
             % Circumferential parameterization
 
             [base, baseindex] = self.basalSlice();
@@ -602,12 +597,6 @@ classdef DENSE3D < handle
                 points = cat(1, points, isoline);
                 params = cat(1, params, arclength(:));
             end
-
-            %{
-            plot3(insertion(1), insertion(2), insertion(3), 'r*', 'MarkerSize', 20)
-            hold on
-            scatter3(points(:,1), points(:,2), points(:,3), 'Marker', '.', 'CData', params(:))
-            %}
 
             % Flip the direction
             % TODO: Add a check to make sure this goes the correct way
