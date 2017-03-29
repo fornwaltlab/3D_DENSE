@@ -78,7 +78,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Style',    'pushbutton', ...
                 'String',   'Add', ...
                 'Units',    'Normalized', ...
-                'Callback', @(s,e)self.hdense.addData(), ...
+                'Callback', @(s,e)addCallback(self), ...
                 'Position', [0.05 0.05 0.425 0.15]);
 
             self.Handles.hremove = uicontrol( ...
@@ -123,6 +123,21 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Style', 'checkbox', ...
                 'Callback', @(s,e)set(self.hdense, 'Flip', get(s, 'Value')), ...
                 'String', 'Flip Ventricle');
+        end
+
+        function addCallback(self)
+            key = 'Location.LoadWorkspace';
+            pth = get(self.Config, key, pwd);
+
+            if ~exist(pth, 'dir')
+                pth = pwd;
+            end
+
+            uipath = self.hdense.addData(pth);
+
+            if ~isempty(uipath)
+                set(self.Config, key, uipath);
+            end
         end
 
         function removeCallback(self)

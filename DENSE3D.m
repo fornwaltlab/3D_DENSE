@@ -347,7 +347,10 @@ classdef DENSE3D < hgsetget
             self.Interpolants = displacementSplines(self.Data, varargin{:});
         end
 
-        function addData(self, data, description)
+        function uipath = addData(self, data, description)
+
+            uipath = '';
+
             if ~exist('data', 'var') || (ischar(data) && isdir(data))
 
                 if exist('data', 'var')
@@ -363,6 +366,8 @@ classdef DENSE3D < hgsetget
                     return
                 end
 
+                uipath = pname;
+
                 data = fullfile(pname, fname);
             end
 
@@ -371,9 +376,9 @@ classdef DENSE3D < hgsetget
 
             if iscell(data)
                 if exist('description', 'var')
-                    cellfun(@self.addData, data, description);
+                    cellfun(@self.addData, data, description, 'UniformOutput', false);
                 else
-                    cellfun(@self.addData, data);
+                    cellfun(@self.addData, data, 'UniformOutput', false);
                 end
                 return
             elseif ischar(data)
