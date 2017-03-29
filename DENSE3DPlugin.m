@@ -28,21 +28,31 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             end
         end
 
-        function h = uimenu(self, varargin)
+        function h = uimenu(varargin)
             h = gobjects(1,1);
         end
 
         function refresh(self)
             hlist = self.Handles.hlist;
-            newstrs = {self.hdense.Data.Description};
-            val = min(numel(newstrs), get(hlist, 'value'));
+
+            if isempty(self.hdense.Data)
+                newstrs = {};
+                val = 0;
+            else
+                newstrs = {self.hdense.Data.Description};
+
+                % Add the [base] and [apex] indicators
+                newstrs{1} = [newstrs{1}, ' [base]'];
+                newstrs{end} = [newstrs{end}, ' [apex]'];
+
+                val = min(numel(newstrs), get(hlist, 'value'));
+            end
+
             set(hlist, 'String', newstrs, 'Value', max([val,1]));
         end
 
         function initGUI(self)
             import plugins.dense3D_plugin.*
-
-            h = guidata(self.hfig);
 
             label = {'3D DENSE', 'Analysis'};
             [self.Handles.TabIndex, self.hpanel] = self.addTab(label);
@@ -111,6 +121,7 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 'Units', 'normalized', ...
                 'Position', [0.05 bottoms(3) 0.9 height], ...
                 'Style', 'checkbox', ...
+                'Callback', @(s,e)set(self.hdense, 'Flip', get(s, 'Value')), ...
                 'String', 'Flip Ventricle');
         end
 
