@@ -95,6 +95,8 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
                 self.Handles.hpanel, ...
                 self.Handles.hresults);
 
+            set(self.hpanel, 'UserData', self.Handles.hviewer);
+
             bottoms = linspace(0.9, 0.05, 4);
             bottoms(1) = [];
 
