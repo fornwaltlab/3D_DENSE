@@ -224,6 +224,9 @@ classdef DENSE3Dviewer < DataViewer
 
             hax = NaN;
             hpan = NaN;
+            hpanning = pan(gcbf);
+            hzoom = zoom(gcbf);
+            hrot = rotate3d(gcbf);
 
             import plugins.dense3D_plugin.*
             hbull = Bullseye.empty();
@@ -330,6 +333,15 @@ classdef DENSE3Dviewer < DataViewer
                             'LineWidth', 2, ...
                             'Location', 'southoutside')
                 end
+
+                hpanning = pan(gcbf);
+                hzoom = zoom(gcbf);
+                hrot = rotate3d(gcbf);
+
+                hpanning.setAllowAxesPan(hax, false);
+                hzoom.setAllowAxesZoom(hax, false);
+                hrot.setAllowAxesRotate(hax, false);
+                hrot.Enable = 'off';
 
                 colormap(bwr(65))
 
@@ -468,6 +480,10 @@ classdef DENSE3Dviewer < DataViewer
                     'FlowDirection', 'lefttoright', ...
                     'BackgroundColor', get(self.hdisplay, 'BackgroundColor'));
 
+                hzoom = zoom(gcbf);
+                hpanning = pan(gcbf);
+                hrot = rotate3d(gcbf);
+
                 if regional
                     hbullax = axes( ...
                         'Parent', hflow, ...
@@ -479,6 +495,10 @@ classdef DENSE3Dviewer < DataViewer
                         'XColor', get(hflow, 'BackgroundColor'), ...
                         'YColor', get(hflow, 'BackgroundColor'), ...
                         'Visible', 'on');
+
+                    hzoom.setAllowAxesZoom(hbullax, false);
+                    hpanning.setAllowAxesPan(hbullax, false);
+                    hrot.setAllowAxesRotate(hbullax, false);
 
                     set(hbullax, 'WidthLimits', [250, 250])
 
@@ -558,6 +578,11 @@ classdef DENSE3Dviewer < DataViewer
                     'xcolor', self.dispclr(1,:), ...
                     'xlim', [1, 1 + diff(self.Frames)], ...
                     'ycolor', self.dispclr(1,:));
+
+                hzoom.setAllowAxesZoom(hax, false);
+                hpanning.setAllowAxesPan(hax, false);
+                hrot.setAllowAxesRotate(hax, false);
+                hrot.Enable = 'off';
 
                 self.isAllowExportImage = true;
                 playbackFcn();
@@ -683,6 +708,7 @@ classdef DENSE3Dviewer < DataViewer
                 % Enable rotation
                 hrot = rotate3d(self.hfigure_display);
                 hrot.setAllowAxesRotate(hax, true);
+                hrot.Enable = 'on';
 
                 % Disable Contrast
                 self.hcontrast.setAllowAxes(hax, false);
