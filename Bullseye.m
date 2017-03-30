@@ -198,6 +198,8 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                     'VerticalAlignment',    'middle', ...
                     'HitTest',              'off', ...
                     'HandleVisibility',     'off', ...
+                    'FontUnits',            'normalized', ...
+                    'FontSize',             0.05, ...
                     'Tag',                  'bullseye.labels');
             end
 
@@ -211,6 +213,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             addLinkedProperty(self, 'FontName', 'FontName', self.htext);
             addLinkedProperty(self, 'FontSize', 'FontSize', self.htext);
             addLinkedProperty(self, 'FontWeight', 'FontWeight', self.htext);
+            addLinkedProperty(self, 'FontUnits', 'FontUnits', self.htext);
             addLinkedProperty(self, 'Labels', 'Visible', self.htextgroup);
         end
 
