@@ -420,7 +420,8 @@ classdef DENSE3D < hgsetget
 
         function [base, baseindex] = basalSlice(self)
             % basalSlice - Returns information about the basal slice
-            base = self.Data(1).SequenceInfo(1);
+            baseindex = 1;
+            base = self.Data(baseindex).SequenceInfo(1);
         end
 
         function radialSample(self)
