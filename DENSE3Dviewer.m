@@ -368,10 +368,33 @@ classdef DENSE3Dviewer < DataViewer
             end
         end
 
-        function computeStrains(self)
+        function computeDisplacementSplines(self)
 
             hwait = waitbartimer();
             hwait.String = 'Fitting Radial Basis Functions...';
+            hwait.WindowStyle = 'modal';
+            hwait.AllowClose = false;
+            hwait.Visible = 'on';
+            start(hwait);
+
+            drawnow
+
+            hclean = onCleanup(@()delete(hwait(isvalid(hwait))));
+
+            function statusFcn(x, total)
+                fmt = 'Fitting Radial Basis Functions... (%d/%d)';
+                hwait.String = sprintf(fmt, x, total);
+                drawnow
+            end
+
+            self.Data.interpolate(@statusFcn)
+        end
+
+
+        function computeStrains(self)
+
+            hwait = waitbartimer();
+            hwait.String = '';
             hwait.WindowStyle = 'modal';
             hwait.AllowClose = false;
             hwait.Visible = 'on';
@@ -392,9 +415,9 @@ classdef DENSE3Dviewer < DataViewer
                 drawnow
             end
 
-            self.Data.interpolate(@statusFcn);
-
-            drawnow
+            if isempty(self.Data.Interpolants)
+                self.Data.interpolate(@statusFcn);
+            end
 
             hwait.String = 'Parameterizing the ventricle...';
 
@@ -739,6 +762,12 @@ classdef DENSE3Dviewer < DataViewer
                 frame = self.hplaybar.Value;
 
                 if numel(meshes) < frame || isempty(meshes{frame})
+
+                    if isempty(self.Data.Interpolants)
+                        % Compute displacement splines as needed
+                        self.computeDisplacementSplines()
+                    end
+
                     interp = self.Data.Interpolants(frame);
 
                     % Interpolate the epicardial surface
