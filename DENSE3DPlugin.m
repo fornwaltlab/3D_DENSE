@@ -135,10 +135,14 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             % Store the state of all tools
             self.guistate.Enable = get(hdata.htools, 'Enable');
 
-            tags = {'Exploration.Rotate3d', 'Exploration.Pan', 'Exploration.ZoomOut', 'ZoomIn'};
+            tags = {'Exploration.Rotate3d'
+                    'Exploration.Pan'
+                    'Exploration.ZoomOut'
+                    'ZoomIn'};
 
             % Disable everything by default
             set(hdata.htools, 'Enable', 'off')
+            set(hdata.hfig, 'Colormap', bwr)
 
             for k = 1:numel(tags)
                 set(findobj(hdata.htools, 'tag', tags{k}), 'Enable', 'on')
