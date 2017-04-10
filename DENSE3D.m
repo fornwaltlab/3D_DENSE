@@ -560,6 +560,9 @@ classdef DENSE3D < hgsetget
 
             [base, baseindex] = self.basalSlice();
             analysis = self.Data(baseindex).AnalysisInfo;
+
+            % Take into account that PositionB is the right-most so we need
+            % to shift our parameterization by 1/6 later on
             insertion = tformfwd(base.tform, [analysis.PositionB, 0]);
 
             % For each isoline find the point that is closest to the
@@ -572,11 +575,20 @@ classdef DENSE3D < hgsetget
             points = zeros(0, 3);
             params = zeros(0, 1);
 
+            % Find the point in the mesh that corresponds to the apex
+            [~, apexind] = ismember(self.Apex, msh.vertices, 'rows');
+
             for k = 1:numel(isolines)
                 % Draw an isoline at this particular value
-                [isoline, tris, ~, ~, SU] = slice_isolines(msh.vertices, msh.faces, long(:), isolines(k), 'Manifold', true);
+                [isoline, tris, ~, ~, SU] = slice_isolines(msh.vertices, ...
+                    msh.faces, long(:), isolines(k), 'Manifold', true);
 
                 % Assumes that the base is 0 and the apex is 1
+                % Do a quick check here to ensure that this is actually the
+                % case
+                assert(SU(apexind) < 0.5, ...
+                    'Expected the apex to be 1 and base to be 0')
+
                 meshkeep = SU <= (isolines(k) + eps);
 
                 trikeep = all(ismember(tris, find(meshkeep)), 2);
@@ -599,13 +611,29 @@ classdef DENSE3D < hgsetget
                 arclength = arclength ./ arclength(end);
                 arclength(end) = [];
 
+                % Now check whether the orientation of this sampling is
+                % correct.
+
+                % Compute the normal vector to the plane based upon the
+                % contour orientation
+                tmp = normr(bsxfun(@minus, isoline, mean(isoline, 1)));
+                mean_norm = mean(cross(tmp(1:end-1,:), tmp(2:end,:)),1);
+                D = point2planeDistance(self.Apex, isoline(1,:), mean_norm);
+
+                % If the apex was not on the "correct" side, then the
+                % orientation of the contour was the opposite of what we
+                % expected and it needs to be flipped
+                if D < 0
+                    arclength = 1 - arclength;
+                end
+
                 points = cat(1, points, isoline);
                 params = cat(1, params, arclength(:));
             end
 
-            % Flip the direction
-            % TODO: Add a check to make sure this goes the correct way
-            params = 1 - params;
+            % Shift the parameterization by 1/6 to account for PositionB
+            % being the EDGE of segment 1 and not the LV insertion
+            params = mod(params - (1/6), 1);
 
             % Try to get Circ locations for each vertex in the initial mesh
             S = scatteredInterpolant(points, params, 'nearest');
