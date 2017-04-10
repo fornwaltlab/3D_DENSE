@@ -420,33 +420,7 @@ classdef DENSE3D < hgsetget
 
         function [base, baseindex] = basalSlice(self)
             % basalSlice - Returns information about the basal slice
-
-            baseindex = 1;
-            base = self.Data(baseindex).SequenceInfo(1);
-            return
-
-            seqs = arrayfun(@(x)x.SequenceInfo(1), [self.Data]);
-            parallelids = [seqs.parallelid];
-            issa = parallelids == mode(parallelids);
-
-            % Get just the short-axis SequenceInfo values
-            short_axis = seqs(issa);
-
-            dists = nan(size(short_axis));
-
-            for k = 1:numel(dists)
-                IOP = short_axis(k).ImageOrientationPatient;
-                IPP = short_axis(k).ImagePositionPatient;
-
-                normal = cross(IOP(1:3), IOP(4:6));
-
-                dists(k) = point2planeDistance(self.Apex, IPP, normal);
-            end
-
-            % Find the point that was the absolute furthest from the base
-            [~, baseindex] = max(abs(dists));
-
-            base = short_axis(baseindex);
+            base = self.Data(1).SequenceInfo(1);
         end
 
         function radialSample(self)
