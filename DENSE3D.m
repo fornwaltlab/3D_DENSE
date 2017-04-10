@@ -648,35 +648,32 @@ classdef DENSE3D < hgsetget
         end
 
         function apex = autoApex(self)
-            % Sort from base to apex
-            seqs = arrayfun(@(x)x.SequenceInfo(1), [self.Data]);
-            parallelids = [seqs.parallelid];
-            issa = parallelids == mode(parallelids);
 
-            % Get just the short-axis SequenceInfo values
-            short_axis = seqs(issa);
+            apx = self.Data(self.apicalSlice).SequenceInfo(1);
 
-            maxInd = zeros(size(short_axis));
+            % Figure out what side the basal slice is on
+            base = self.basalSlice();
 
-            % Now compute the normal for each of these slices
-            for k = 1:numel(short_axis)
+            normal = cross(apx.ImageOrientationPatient(1:3), ...
+                           apx.ImageOrientationPatient(4:6));
 
-                vertices = self.EndocardialMesh.vertices;
+            aIPP = apx.ImagePositionPatient;
+            bIPP = base.ImagePositionPatient;
 
-                IOP = short_axis(k).ImageOrientationPatient;
-                IPP = short_axis(k).ImagePositionPatient;
+            D = point2planeDistance(bIPP.', aIPP, normal);
 
-                normal = cross(IOP(1:3), IOP(4:6));
-
-                dists = point2planeDistance(vertices, IPP, normal);
-
-                [~, maxInd(k)] = min(dists);
+            % Determine the function for finding the apical point
+            if D > 0
+                func = @min;
+            else
+                func = @max;
             end
 
-            apexIndex = unique(maxInd);
-            assert(numel(apexIndex) == 1, 'More than one apex point identified');
+            vertices = self.EndocardialMesh.vertices;
+            dists = point2planeDistance(vertices, aIPP, normal);
 
-            apex = vertices(apexIndex,:);
+            [~, apexind] = func(dists);
+            apex = vertices(apexind,:);
         end
 
         function generateMeshes(self)
