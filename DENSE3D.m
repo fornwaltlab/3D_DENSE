@@ -636,8 +636,8 @@ classdef DENSE3D < hgsetget
             params = mod(params - (1/6), 1);
 
             % Try to get Circ locations for each vertex in the initial mesh
-            S = scatteredInterpolant(points, params, 'nearest');
-            self.Parameterization.Circumferential = S(msh.vertices);
+            inds = dsearchn(points, msh.vertices);
+            self.Parameterization.Circumferential = params(inds);
         end
 
         function apex = autoApex(self)
