@@ -716,15 +716,10 @@ classdef DENSE3D < hgsetget
     end
 
     methods (Static)
-
-        function delayTimes(strains)
-            % Uses the second principal strain
-
-
-        end
-
         function result = torsion(strains)
-            result = -asin(2 * strains.CL ./ sqrt((1 + 2*strains.CC) .* (1 + 2*strains.LL)));
+            % torsion - Compute the CL shear angle from the strain tensor
+            result = -asin(2 * strains.CL ./ ...
+                sqrt((1 + 2 * strains.CC) .* (1 + 2 * strains.LL)));
         end
     end
 end
