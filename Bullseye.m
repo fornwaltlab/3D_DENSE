@@ -4,8 +4,6 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         AngularOffset   = 2*pi/3    % Angular offset of bullseye
         ButtonDownFcn   = []        % Overloaded ButtonDownFcn
         CData                       % Data to display
-        Colormap                    % Custom colormap to use for this
-        CLim                        % Color limits
         Data
         Display = 'raw'             % 'raw' | 'average' | 'median'
         LabelFormat = '%0.2f'       % Either a string or func handle
@@ -25,10 +23,15 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         ydata
         zdata
         cache
+
+        colormap_
+        clim_
     end
 
     properties (Dependent)
         Apex
+        Colormap                    % Custom colormap to use for this
+        CLim                        % Color limits
         SegmentAverages
     end
 
@@ -40,11 +43,33 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
     methods
 
         function res = get.Colormap(self)
-            if isempty(self.Colormap)
+            if isempty(self.colormap_)
                 % Use the colormap of the axes
                 res = colormap(ancestor(self.Handle, 'figure'));
             else
-                res = self.Colormap;
+                res = self.colormap_;
+            end
+        end
+
+        function set.Colormap(self, value)
+            self.colormap_ = value;
+            self.CLim = self.CLim;
+        end
+
+        function res = get.CLim(self)
+            if isempty(self.clim_)
+                res = get(ancestor(self.Handle, 'axes'), 'CLim');
+            else
+                res = self.clim_;
+            end
+        end
+
+        function set.CLim(self, value)
+            if isempty(self.colormap_)
+                set(ancestor(self.Handle, 'axes'), 'CLim', value);
+            else
+                self.clim_ = value;
+                refresh(self);
             end
         end
 
@@ -280,6 +305,22 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             end
 
             cdata = rot90(cdata, 2);
+
+            % Scale the colordata if necessary
+            if ~isempty(self.colormap_)
+                % Check if we need to apply scaling
+                if ~isempty(self.CLim)
+                    cdata = (cdata - self.CLim(1)) ./ self.CLim(2);
+
+                    % Chop the upper/lower values
+                    cdata(cdata < 0) = 0;
+                    cdata(cdata > 1) = 1;
+                end
+
+                ind = gray2ind(cdata, size(self.colormap_, 1));
+                cdata = ind2rgb(ind, self.colormap_);
+            end
+
             set(self.hsurf, 'XData', X, 'YData', Y, 'ZData', Z, 'CData', cdata);
 
             % Update the label positions if necessary
