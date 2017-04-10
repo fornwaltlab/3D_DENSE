@@ -257,7 +257,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
             set(self.haha, 'XData', X(:), 'YData', Y(:), 'ZData', Z(:));
 
-            sz = max(size(self.CData), [120, 12]);
+            sz = max(size(self.CData), [12, 120]);
 
             % Get the coordinates of the surface
             [X,Y] = self.computeCoordinates(sz, self.AngularOffset, rlims);
