@@ -526,11 +526,21 @@ classdef DENSE3D < hgsetget
             normal = cross(base.ImageOrientationPatient(1:3), ...
                            base.ImageOrientationPatient(4:6));
 
+            % Check to make sure that the normal points towards the apex
+            apex = self.Data(self.apicalSlice).SequenceInfo(1);
+
+            dist = point2planeDistance(apex.ImagePositionPatient.', ...
+                base.ImagePositionPatient, normal);
+
+            if dist < 0
+                normal = -normal;
+            end
+
             [verts, faces] = half_space_intersect( ...
                 self.EndocardialMesh.vertices, ...
                 self.EndocardialMesh.faces, ...
                 base.ImagePositionPatient, ...
-                -normal, 'Cap', false);
+                normal, 'Cap', false);
 
             self.EndocardialMeshCut = struct('faces', faces, ...
                 'vertices', verts);
@@ -539,13 +549,10 @@ classdef DENSE3D < hgsetget
                 self.EpicardialMesh.vertices, ...
                 self.EpicardialMesh.faces, ...
                 base.ImagePositionPatient, ...
-                -normal, 'Cap', false);
+                normal, 'Cap', false);
 
             self.EpicardialMeshCut = struct('faces', faces, ...
                 'vertices', verts);
-
-            % Rotate this up so that it's upright
-
         end
 
         function parameterize(self)
