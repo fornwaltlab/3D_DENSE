@@ -41,9 +41,6 @@ classdef RBFInterpolator < hgsetget
 % OUTPUTS:
 %   R:      Object, Handle to the RBFInterpolator object which can be used
 %           to query the interpolator at a specific point.
-%
-% Last Modified: 10-14-2013
-% Modified By: Jonathan Suever (suever@gmail.com)
 
     properties (SetAccess = 'protected')
         Constant            % Constant to be used for some basis functions
@@ -64,10 +61,10 @@ classdef RBFInterpolator < hgsetget
     end
 
     properties (Constant)
-        GAUSSIAN        = @(r,const)RBFInterpolator.gaussian(r,const);
-        THINPLATE       = @(r,const)RBFInterpolator.thinplate(r);
-        CUBIC           = @(r,const)RBFInterpolator.cubic(r);
-        MULTIQUADRICS   = @(r,const)RBFInterpolator.multiquadrics(r, const);
+        GAUSSIAN        = @(r,const)plugins.dense3D_plugin.RBFInterpolator.gaussian(r,const);
+        THINPLATE       = @(r,const)plugins.dense3D_plugin.RBFInterpolator.thinplate(r);
+        CUBIC           = @(r,const)plugins.dense3D_plugin.RBFInterpolator.cubic(r);
+        MULTIQUADRICS   = @(r,const)plugins.dense3D_plugin.RBFInterpolator.multiquadrics(r, const);
         LINEAR          = @(r,const)r;
     end
 
@@ -180,14 +177,13 @@ classdef RBFInterpolator < hgsetget
             A = [A  P; P' zeros(dims + 1, dims + 1)];
             B = [self.Data; zeros(dims + 1, size(self.Data, 2))];
 
-            %[U,S,V] = svd(A.' * A);
-            %inds = eye(size(S)) & S ~= 0;
-            %S(inds) = 1 ./ S(inds);
-
-            %self.Weights = V * S.' * U.' * A.' * B;
-            %return
-
+            % We can silence this warning here because mldivide
+            % automatically uses the BEST solver for the specified inputs.
+            % If it is an ill-conditioned problem, then it will still
+            % provide the "best answer"
+            warning('off', 'MATLAB:nearlySingularMatrix')
             self.Weights = A \ B;
+            warning('on', 'MATLAB:nearlySingularMatrix')
         end
 
         function res = query(self, varargin)
@@ -238,21 +234,6 @@ classdef RBFInterpolator < hgsetget
             S = bsxfun(@plus, bsx, self.Weights(nNodes + 1,:));
             res = (queries * self.Weights(nNodes + 2 : end,:)) + S;
         end
-
-        %function varargout = subsref(self, S)
-            % subsref - Overloaded subscript referencing
-            %
-            %   This is overloaded because we want to be able to use
-            %   indices to interpolate the RBF
-
-         %   keyboard
-         %   switch S(1).type
-         %       case '()'
-          %          [varargout{1:nargout}] = query(self, S(1).subs{:});
-          %      otherwise
-          %          [varargout{1:nargout}] = builtin('subsref', self, S);
-          %  end
-        %end
     end
 
     %-- Get / Set Methods --%
