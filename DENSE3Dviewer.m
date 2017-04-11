@@ -361,10 +361,15 @@ classdef DENSE3Dviewer < DataViewer
                     self.hlisten_playbar.Enabled = false;
                 end
 
-
                 axis(hax, 'equal')
                 axis(hax, 'tight')
                 axis(hax, 'off')
+
+                % Allow exports
+                self.isAllowExportImage = true;
+                if (self.hplaybar.Max - self.hplaybar.Min) > 1
+                    self.isAllowExportVideo = true;
+                end
             end
         end
 
@@ -394,7 +399,7 @@ classdef DENSE3Dviewer < DataViewer
         function computeStrains(self)
 
             hwait = waitbartimer();
-            hwait.String = '';
+            hwait.String = 'Computing Strains...';
             hwait.WindowStyle = 'modal';
             hwait.AllowClose = false;
             hwait.Visible = 'on';
@@ -406,6 +411,7 @@ classdef DENSE3Dviewer < DataViewer
 
             if isempty(self.Data.EndocardialMeshCut)
                 hwait.String = 'Rendering 3D Mesh...';
+                drawnow
                 self.Data.generateMeshes();
             end
 
@@ -476,13 +482,14 @@ classdef DENSE3Dviewer < DataViewer
                 visible = repmat({'on'}, nPlots, 1);
                 visible(~self.ActiveSegments) = {'off'};
 
-                cdata = get(hbull.hsurf, 'CData');
+                cdata = hbull.CData;
                 tf = ismember(cdata, find(~self.ActiveSegments));
 
+                % Set the disabled segments to be partly transparent
                 alphadata = ones(size(tf));
                 alphadata(tf) = 0.3;
 
-                set(hbull.hsurf, 'FaceAlpha', 'flat', 'AlphaData', alphadata, 'AlphaDataMapping', 'none')
+                set(hbull, 'AlphaData', alphadata);
 
                 for k = 1:numel(hplot)
                     set(hplot{k}, {'Color'}, colors, {'Visible'}, visible)
@@ -540,6 +547,7 @@ classdef DENSE3Dviewer < DataViewer
                         'Labels', 'on', ...
                         'LabelFormat', '%d', ...
                         'Parent', hbullax, ...
+                        'Colormap', hsv, ...
                         'ButtonDownFcn', @(s,e)clickBullseye(e));
 
                     axis(hbullax, 'equal')
