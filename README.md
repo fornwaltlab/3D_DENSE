@@ -9,7 +9,7 @@ A plugin for analyzing 3D DENSE data
 After installation of *DENSEanalysis*, run the following from the MATLAB command line:
 
 ```matlab
-plugins.PluginManager.import('https://github.com/fornwaltlab/dense3D_plugin')
+plugins.PluginManager.import('https://github.com/suever/dense3D_plugin')
 ```
 
 ## Credits
