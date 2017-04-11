@@ -24,11 +24,13 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         zdata
         cache
 
+        alphadata_
         colormap_
         clim_
     end
 
     properties (Dependent)
+        AlphaData                   % Transparency
         Apex
         Colormap                    % Custom colormap to use for this
         CLim                        % Color limits
@@ -49,6 +51,15 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             else
                 res = self.colormap_;
             end
+        end
+
+        function res = get.AlphaData(self)
+            res = self.alphadata_;
+        end
+
+        function set.AlphaData(self, value)
+            self.alphadata_ = value;
+            refresh(self);
         end
 
         function set.Colormap(self, value)
@@ -292,8 +303,15 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                 case 'raw'
                     if ~isempty(self.CData)
                         cdata = imresize(self.CData, sz, 'nearest');
+
+                        if ~isempty(self.AlphaData)
+                            adata = imresize(self.AlphaData, sz, 'nearest');
+                        else
+                            adata = 1;
+                        end
                     else
                         cdata = Z;
+                        adata = 1;
                     end
                 case 'average'
                     img = self.getTemplate(self.Segments, sz);
@@ -321,7 +339,27 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                 cdata = ind2rgb(ind, self.colormap_);
             end
 
-            set(self.hsurf, 'XData', X, 'YData', Y, 'ZData', Z, 'CData', cdata);
+            inputs = {};
+
+            if exist('adata', 'var')
+                adata = rot90(adata, 2);
+                if isscalar(adata)
+                    inputs = [inputs, {'FaceAlpha', adata}];
+                else
+                    inputs = [inputs, {'AlphaData',         adata, ...
+                                       'FaceAlpha',         'flat', ...
+                                       'AlphaDataMapping',  'none'}];
+                end
+            else
+                inputs = [inputs, {'FaceAlpha', 1}];
+            end
+
+            set(self.hsurf, ...
+                'XData', X, ...
+                'YData', Y, ...
+                'ZData', Z, ...
+                'CData', cdata, ...
+                inputs{:});
 
             % Update the label positions if necessary
             centers = self.segmentCenters;
