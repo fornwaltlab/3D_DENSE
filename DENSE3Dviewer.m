@@ -29,6 +29,11 @@ classdef DENSE3Dviewer < DataViewer
             'FontSize',     0.03)
     end
 
+    properties (SetAccess = 'private')
+        isAllowExportMat = false;
+        isAllowExportExcel = false;
+    end
+
     properties (Hidden)
         api
         options
@@ -106,7 +111,65 @@ classdef DENSE3Dviewer < DataViewer
 
             % Now hide everything
             reset(self)
+
+            self.isAllowExportMat = ~isempty(self.Data);
         end
+
+        function file = exportExcel(obj, startpath)
+            error(sprintf('%s:NotImplemented', mfilename), ...
+                'exportExcel not implemented yet');
+        end
+
+        function [file, data] = exportMat(obj, startpath)
+
+            if ~exist('startpath', 'var')
+                startpath = pwd;
+            end
+
+            if ~exist(startpath, 'dir')
+                [origstartpath, ~, ext] = fileparts(startpath);
+                file = startpath;
+                startpath = origstartpath;
+
+                if isempty(ext)
+                    file = [file, '.mat'];
+                end
+            end
+
+            if ~exist('file', 'var')
+                [uifile, uipath] = uiputfile('*.mat', [], startpath);
+                if isequal(uifile, 0)
+                    file = [];
+                    return
+                end
+
+                file = fullfile(uipath, uifile);
+                [~, ~, e] = fileparts(file);
+
+                if ~isequal(e, '.mat')
+                    file = [file, '.mat'];
+                end
+            end
+
+            if isempty(obj.Data.Strains)
+                obj.computeStrains();
+            end
+
+            hwait = waitbartimer();
+            hwait.String = 'Generating output file...';
+            hwait.WindowStyle = 'modal';
+            hwait.AllowClose = false;
+            hwait.Visible = 'on';
+            start(hwait);
+
+            drawnow
+
+            hclean = onCleanup(@()delete(hwait(isvalid(hwait))));
+
+            data = obj.Data.save();
+            save(file, '-struct', 'data')
+        end
+
 
         function self = DENSE3Dviewer(data, varargin)
 

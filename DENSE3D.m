@@ -96,6 +96,110 @@ classdef DENSE3D < hgsetget
             index = numel(self.Data);
         end
 
+        function output = save(self, varargin)
+
+            parser = inputParser();
+            parser.KeepUnmatched = true;
+            parser.parse(varargin{:});
+
+            opts = structobj(parser.Unmatched);
+
+            %--- Image Info ---%
+            if getfield(opts, 'ImageInfo', false)
+                output.ImageInfo = [self.Data.ImageInfo];
+            end
+
+            %--- ROI Info ---%
+            if getfield(opts, 'ROIInfo', true)
+                output.ROIInfo = [self.Data.ROIInfo];
+            end
+
+            %--- Analysis Info ---%
+            if getfield(opts, 'AnalysisInfo', true)
+                analysis = [self.Data.AnalysisInfo];
+
+                analysisFrames = cat(2, analysis.FramesForAnalysis);
+                frames = max(analysisFrames(1,:)):min(analysisFrames(2,:));
+
+                AI.InterpolationMethod = 'RadialBasisFunction';
+                AI.RBFConstants = [self.Interpolants.Constant];
+                AI.RBFNormalized = self.Interpolants(1).Normalized;
+                AI.RBFType = self.Interpolants(1).Type;
+                AI.FramesForAnalysis = frames;
+
+                % Eventually we want to make these options
+                AI.CoordinateSystem = 'local';
+                AI.Apex = true;
+
+                output.AnalysisInfo = AI;
+            end
+
+            %--- DENSE Info ---%
+            if getfield(opts, 'DENSEInfo', true)
+                output.DENSEInfo = [self.Data.DENSEInfo];
+            end
+
+            %--- Sequence Info ---%
+            if getfield(opts, 'SequenceInfo', true)
+                output.SequenceInfo = cat(3, self.Data.SequenceInfo);
+            end
+
+            %--- Displacement Info ---%
+            if getfield(opts, 'DisplacementInfo', true)
+                DI.X = self.Strains.Locations(:,1);
+                DI.Y = self.Strains.Locations(:,2);
+                DI.Z = self.Strains.Locations(:,3);
+
+                % Now sample the splines at these locations
+                DI.dX = zeros(size(self.Strains.Locations, 1), numel(frames));
+                DI.dY = zeros(size(self.Strains.Locations, 1), numel(frames));
+                DI.dZ = zeros(size(self.Strains.Locations, 1), numel(frames));
+
+                for k = 1:numel(frames)
+                    D = single(self.Interpolants(k).query(self.Strains.Locations));
+                    DI.dX(:,k) = D(:,1);
+                    DI.dY(:,k) = D(:,2);
+                    DI.dZ(:,k) = D(:,3);
+                end
+
+                output.DisplacementInfo = DI;
+            end
+
+            %--- Strain Info ---%
+            if getfield(opts, 'StrainInfo', true)
+                inds = dsearchn(self.EndocardialMeshCut.vertices, ...
+                                self.Strains.Locations);
+
+                SI.X = single(self.EndocardialMeshCut.vertices(:,1));
+                SI.Y = single(self.EndocardialMeshCut.vertices(:,2));
+                SI.Z = single(self.EndocardialMeshCut.vertices(:,3));
+
+                tmp = rmfield(self.Strains, {'Locations', 'Parameterization'});
+
+                fields = fieldnames(tmp);
+
+                nFrames = numel(self.Interpolants);
+
+                for k = 1:numel(fields)
+                    values = accumarray(inds, 1:numel(inds), [], ...
+                        @(x){mean(tmp.(fields{k})(x,:),1)}, {nan(1, nFrames+1)});
+                    SI.(fields{k}) = single(cat(1, values{:}));
+                end
+
+                output.StrainInfo = SI;
+            end
+
+            %--- Regional Strain Info ---%
+            if getfield(opts, 'RegionalStrainInfo', true)
+                RSI = self.regionalStrains();
+                RSI = rmfield(RSI, {'Segmentation', 'Locations'});
+
+                output.RegionalStrainInfo = RSI;
+            end
+
+            output.AnalysisInstanceUID = dicomuid;
+        end
+
         function movie(self)
 
             points = self.Interpolants(1).Points;
