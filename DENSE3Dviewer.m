@@ -347,6 +347,8 @@ classdef DENSE3Dviewer < DataViewer
                 import plugins.dense3D_plugin.*
                 self.exportaxes = true;
 
+                set(self.hfigure_display, 'renderer', 'opengl')
+
                 hpan = uipanel( ...
                     'Parent', self.hdisplay, ...
                     'BorderType', 'none', ...
@@ -564,6 +566,7 @@ classdef DENSE3Dviewer < DataViewer
 
             function initFcn()
                 self.exportaxes = true;
+                set(self.hfigure_display, 'Renderer', 'opengl')
 
                 hpan = uipanel( ...
                     'Parent', self.hdisplay, ...
@@ -744,6 +747,8 @@ classdef DENSE3Dviewer < DataViewer
 
             function initFcn()
                 self.exportaxes = true;
+
+                set(self.hfigure_display, 'renderer', 'opengl')
 
                 hax = axes('Parent', self.hdisplay);
                 htitle = title(hax, '3D Mesh', 'Color', self.dispclr);
