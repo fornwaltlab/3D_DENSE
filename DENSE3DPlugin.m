@@ -55,6 +55,18 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
         function initGUI(self)
             import plugins.dense3D_plugin.*
 
+            h = guidata(self.hfig(1));
+
+            hdata = h.hdata;
+
+            if ~hasROIType(hdata, 'plugins.dense3D_plugin.SADualContour')
+                addROIType(hdata, SADualContour);
+            end
+
+            if ~hasROIType(hdata, 'plugins.dense3D_plugin.LADualContour')
+                addROIType(hdata, LADualContour);
+            end
+
             label = {'3D DENSE', 'Analysis'};
             [self.Handles.TabIndex, self.hpanel] = self.addTab(label);
 
