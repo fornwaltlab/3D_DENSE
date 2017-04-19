@@ -22,6 +22,7 @@ classdef DENSE3D < hgsetget
     end
 
     properties (Dependent)
+        AnalysisFrames
         Data
     end
 
@@ -34,6 +35,13 @@ classdef DENSE3D < hgsetget
     end
 
     methods
+
+        function res = get.AnalysisFrames(self)
+            AI = [self.Data.AnalysisInfo];
+            frames = arrayfun(@(x)x.FramesForAnalysis(:).', AI, 'Uniform', 0);
+            frames = cat(1, frames{:});
+            res = [max(frames(:,1)), min(frames(:,2))];
+        end
 
         function set.Data(self, value)
             % Make sure that the data is unique such that there are no two
@@ -116,16 +124,11 @@ classdef DENSE3D < hgsetget
 
             %--- Analysis Info ---%
             if getfield(opts, 'AnalysisInfo', true)
-                analysis = [self.Data.AnalysisInfo];
-
-                analysisFrames = cat(2, analysis.FramesForAnalysis);
-                frames = max(analysisFrames(1,:)):min(analysisFrames(2,:));
-
                 AI.InterpolationMethod = 'RadialBasisFunction';
                 AI.RBFConstants = [self.Interpolants.Constant];
                 AI.RBFNormalized = self.Interpolants(1).Normalized;
                 AI.RBFType = self.Interpolants(1).Type;
-                AI.FramesForAnalysis = frames;
+                AI.FramesForAnalysis = self.AnalysisFrames;
 
                 % Eventually we want to make these options
                 AI.CoordinateSystem = 'local';
@@ -448,7 +451,11 @@ classdef DENSE3D < hgsetget
         end
 
         function interpolate(self, varargin)
-            self.Interpolants = displacementSplines(self.Data, varargin{:});
+
+            frames = self.AnalysisFrames;
+
+            self.Interpolants = displacementSplines(self.Data, ...
+                frames(1):frames(end), varargin{:});
         end
 
         function uipath = addData(self, data, description)
@@ -807,7 +814,7 @@ classdef DENSE3D < hgsetget
     end
 end
 
-function splines = displacementSplines(data, progressfunc)
+function splines = displacementSplines(data, frames, progressfunc)
 
     if ~exist('progressfunc', 'var')
         progressfunc = @(x,y)fprintf('Processing frame %d of %d\n', x, y);
@@ -815,12 +822,7 @@ function splines = displacementSplines(data, progressfunc)
 
     import plugins.dense3D_plugin.*
 
-    analysis = [data.AnalysisInfo];
     images = [data.ImageInfo];
-
-    % Figure out which frames we need to use
-    analysisFrames = cat(2, analysis.FramesForAnalysis);
-    frames = max(analysisFrames(1,:)):min(analysisFrames(2,:));
 
     % Pre-allocate the RBFs
     RBFs = cell(size(frames));

@@ -81,8 +81,10 @@ classdef DENSE3Dviewer < DataViewer
     methods
         function res = get.Frames(self)
             AI = [self.Data.Data.AnalysisInfo];
-            frames = [AI.FramesForAnalysis];
-            res = [max(frames(1,:)), min(frames(2,:))];
+
+            frames = arrayfun(@(x)x.FramesForAnalysis(:).', AI, 'Uniform', 0);
+            frames = cat(1, frames{:});
+            res = [max(frames(:,1)), min(frames(:,2))];
         end
 
         function clearCache(self)
