@@ -1,7 +1,32 @@
 classdef LADualContour < ROIType
     methods
         function self = LADualContour()
-            self@ROIType('hladual', 'Long Axis Dual Ventricle', 3, 'ladual', rand(16,16,3), false, true);
+
+            cdata = [ ...
+                1 1 3 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 3 3 1 3 1 1 1 1 1 1 1 1 1 1 1
+                1 3 1 2 3 1 1 3 1 1 1 1 1 1 1 1
+                1 3 1 3 1 1 3 3 1 3 1 1 1 1 1 1
+                1 3 1 3 1 1 3 1 1 3 1 1 1 1 1 1
+                3 3 1 3 1 2 3 1 3 2 1 1 1 3 1 1
+                3 1 2 3 1 3 1 1 3 1 1 1 2 3 1 3
+                3 1 3 1 2 3 1 3 2 1 1 1 3 1 2 3
+                3 1 3 1 3 1 1 3 1 1 1 2 3 1 3 1
+                3 1 3 2 3 1 3 2 1 1 2 3 1 2 3 1
+                3 1 3 3 1 2 3 1 1 2 3 1 1 3 1 1
+                3 1 1 1 1 3 1 1 3 3 1 1 3 1 1 1
+                2 3 1 1 1 3 2 3 3 1 1 3 1 1 1 1
+                1 3 3 1 1 3 3 1 1 3 3 1 1 1 1 1
+                1 2 3 1 1 1 1 2 3 2 1 1 1 1 1 1
+                1 1 2 3 3 3 3 3 1 1 1 1 1 1 1 1];
+
+            cmap = [NaN NaN NaN;
+                    0.5 0.5 0.5;
+                    0.0 0.0 0.0];
+
+            cdata = ind2rgb(cdata, cmap);
+
+            self@ROIType('hladual', 'Long Axis Dual Ventricle', 3, 'ladual', cdata, false, true);
         end
 
         function [pos, iscls, iscrv, iscrn] = drawContour(self, hax, varargin)

@@ -1,8 +1,33 @@
 classdef SADualContour < ROIType
     methods
         function self = SADualContour()
+
+            cdata = [
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 1 1 2 3 3 3 3 3 3 3 3 2 1 1 1
+                1 2 3 3 1 1 1 1 1 1 1 1 3 3 2 1
+                2 3 1 1 2 3 3 3 3 2 3 3 2 1 3 2
+                3 1 2 3 3 1 1 3 2 3 1 1 3 2 1 3
+                3 1 3 1 1 1 3 2 3 1 1 1 1 3 1 3
+                3 1 3 1 1 1 3 2 3 1 1 1 1 3 1 3
+                3 1 2 3 3 1 1 3 2 3 1 1 3 2 1 3
+                2 3 1 1 2 3 3 3 3 2 3 3 2 1 3 2
+                1 2 3 3 1 1 1 1 1 1 1 1 3 3 2 1
+                1 1 1 2 3 3 3 3 3 3 3 3 2 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1];
+
+            cmap = [NaN NaN NaN;
+                    0.7 0.7 0.7;
+                    0.0 0.0 0.0];
+
+            cdata = ind2rgb(cdata, cmap);
+
             self@ROIType('hsadual', 'Short Axis Dual Ventricle', 3, ...
-                'sadual', rand(16,16,3), true, true);
+                'sadual', cdata, true, true);
         end
 
         function [pos, iscls, iscrv, iscrn] = drawContour(self, hax, varargin)
