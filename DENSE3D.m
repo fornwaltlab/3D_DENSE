@@ -1,18 +1,12 @@
 classdef DENSE3D < hgsetget
 
-    % TODO: Add APEX label to the slice that was determined automatically
-    % to be the apex
-    %
-    % TODO: Add BASE label to the slice that was determined automatically
-    % to be the base
-
     properties
         Apex
         Parameterization
         EndocardialMesh
-        EndocardialMeshCut
+        EndocardialMesh
         EpicardialMesh
-        EpicardialMeshCut
+        EpicardialMesh
         Interpolants
         LocalCoordinates
         RadialParams
@@ -73,9 +67,9 @@ classdef DENSE3D < hgsetget
             % changed
 
             self.EndocardialMesh = [];
-            self.EndocardialMeshCut = [];
+            self.EndocardialMesh = [];
             self.EpicardialMesh = [];
-            self.EpicardialMeshCut = [];
+            self.EpicardialMesh = [];
             self.Interpolants = [];
             self.LocalCoordinates = [];
             self.RadialParams = [];
@@ -170,12 +164,12 @@ classdef DENSE3D < hgsetget
 
             %--- Strain Info ---%
             if getfield(opts, 'StrainInfo', true)
-                inds = dsearchn(self.EndocardialMeshCut.vertices, ...
+                inds = dsearchn(self.EndocardialMesh.vertices, ...
                                 self.Strains.Locations);
 
-                SI.X = single(self.EndocardialMeshCut.vertices(:,1));
-                SI.Y = single(self.EndocardialMeshCut.vertices(:,2));
-                SI.Z = single(self.EndocardialMeshCut.vertices(:,3));
+                SI.X = single(self.EndocardialMesh.vertices(:,1));
+                SI.Y = single(self.EndocardialMesh.vertices(:,2));
+                SI.Z = single(self.EndocardialMesh.vertices(:,3));
 
                 tmp = rmfield(self.Strains, {'Locations', 'Parameterization'});
 
@@ -215,11 +209,11 @@ classdef DENSE3D < hgsetget
 
             hold on
 
-            endo = self.EndocardialMeshCut;
+            endo = self.EndocardialMesh;
 
             inner = patch('Faces', endo.faces, 'Vertices', endo.vertices, 'FaceColor', 'w', 'FaceAlpha', 0.5);
 
-            epi = self.EpicardialMeshCut;
+            epi = self.EpicardialMesh;
             outer = patch('Faces', epi.faces, 'Vertices', epi.vertices, 'FaceColor', 'w', 'FaceAlpha', 0.5);
 
             axis equal
@@ -244,19 +238,19 @@ classdef DENSE3D < hgsetget
         function preview(self, cdata)
             figure;
             patch( ...
-                'Faces', self.EndocardialMeshCut.faces, ...
-                'Vertices', self.EndocardialMeshCut.vertices, ...
+                'Faces', self.EndocardialMesh.faces, ...
+                'Vertices', self.EndocardialMesh.vertices, ...
                 'FaceColor', 'interp', ...
                 'FaceVertexCData', cdata);
 
             hold on
 
-            inds = dsearchn(self.EndocardialMeshCut.vertices, ...
-                            self.EpicardialMeshCut.vertices);
+            inds = dsearchn(self.EndocardialMesh.vertices, ...
+                            self.EpicardialMesh.vertices);
 
             patch( ...
-                'Faces', self.EpicardialMeshCut.faces, ...
-                'Vertices', self.EpicardialMeshCut.vertices, ...
+                'Faces', self.EpicardialMesh.faces, ...
+                'Vertices', self.EpicardialMesh.vertices, ...
                 'FaceColor', 'interp', ...
                 'FaceVertexCData', cdata(inds));
 
@@ -402,7 +396,7 @@ classdef DENSE3D < hgsetget
 
         function computeStrains(self)
 
-            mesh = self.EndocardialMeshCut;
+            mesh = self.EndocardialMesh;
             points = self.RadialParams.Points;
             self.Strains = queryStrains(mesh, points, self.Apex, ...
                                         self.Interpolants);
@@ -421,7 +415,7 @@ classdef DENSE3D < hgsetget
 
         function coordinates(self)
 
-            endo = self.EndocardialMeshCut;
+            endo = self.EndocardialMesh;
 
             % Compute the normal for each face
             N = normr(normals(endo.vertices, endo.faces));
@@ -536,8 +530,8 @@ classdef DENSE3D < hgsetget
         end
 
         function radialSample(self)
-            endo = self.EndocardialMeshCut;
-            epi = self.EpicardialMeshCut;
+            endo = self.EndocardialMesh;
+            epi = self.EpicardialMesh;
 
             % Rotate these so that the normal is facing up
             desired = [0 0 1];
@@ -628,7 +622,7 @@ classdef DENSE3D < hgsetget
                 base.ImagePositionPatient, ...
                 normal, 'Cap', false);
 
-            self.EndocardialMeshCut = struct('faces', faces, ...
+            self.EndocardialMesh = struct('faces', faces, ...
                 'vertices', verts);
 
             [verts, faces] = half_space_intersect( ...
@@ -637,13 +631,13 @@ classdef DENSE3D < hgsetget
                 base.ImagePositionPatient, ...
                 normal, 'Cap', false);
 
-            self.EpicardialMeshCut = struct('faces', faces, ...
+            self.EpicardialMesh = struct('faces', faces, ...
                 'vertices', verts);
         end
 
         function parameterize(self)
 
-            msh = self.EndocardialMeshCut;
+            msh = self.EndocardialMesh;
 
             long = longitudinalParameterization(msh.vertices, msh.faces, self.Apex);
 

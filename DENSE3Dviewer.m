@@ -476,7 +476,7 @@ classdef DENSE3Dviewer < DataViewer
 
             hclean = onCleanup(@()delete(hwait(isvalid(hwait))));
 
-            if isempty(self.Data.EndocardialMeshCut)
+            if isempty(self.Data.EndocardialMesh)
                 hwait.String = 'Rendering 3D Mesh...';
                 drawnow
                 self.Data.generateMeshes();
@@ -769,7 +769,7 @@ classdef DENSE3Dviewer < DataViewer
 
                 grid(hax, 'on')
 
-                if isempty(self.Data.EpicardialMeshCut)
+                if isempty(self.Data.EpicardialMesh)
                     self.Data.generateMeshes();
 
                     hwait = waitbartimer();
@@ -782,11 +782,11 @@ classdef DENSE3Dviewer < DataViewer
                     pause(3)
                 end
 
-                meshes = {[self.Data.EpicardialMeshCut, self.Data.EndocardialMeshCut]};
+                meshes = {[self.Data.EpicardialMesh, self.Data.EndocardialMesh]};
 
                 hendo = patch( ...
-                    'Faces', self.Data.EndocardialMeshCut.faces, ...
-                    'Vertices', self.Data.EndocardialMeshCut.vertices, ...
+                    'Faces', self.Data.EndocardialMesh.faces, ...
+                    'Vertices', self.Data.EndocardialMesh.vertices, ...
                     'FaceColor', 'w', ...
                     'FaceAlpha', 0.5, ...
                     'Parent', hax);
@@ -794,8 +794,8 @@ classdef DENSE3Dviewer < DataViewer
                 hold(hax, 'on')
 
                 hepi = patch( ...
-                    'Faces', self.Data.EpicardialMeshCut.faces, ...
-                    'Vertices', self.Data.EpicardialMeshCut.vertices, ...
+                    'Faces', self.Data.EpicardialMesh.faces, ...
+                    'Vertices', self.Data.EpicardialMesh.vertices, ...
                     'FaceColor', 'w', ...
                     'Parent', hax, ...
                     'FaceAlpha', 0.5);
@@ -849,10 +849,10 @@ classdef DENSE3Dviewer < DataViewer
                     interp = self.Data.Interpolants(frame);
 
                     % Interpolate the epicardial surface
-                    epi = self.Data.EpicardialMeshCut;
+                    epi = self.Data.EpicardialMesh;
                     epi.vertices = epi.vertices + interp.query(epi.vertices);
 
-                    endo = self.Data.EndocardialMeshCut;
+                    endo = self.Data.EndocardialMesh;
                     endo.vertices = endo.vertices + interp.query(endo.vertices);
 
                     meshes{frame} = [epi, endo];
