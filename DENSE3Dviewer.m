@@ -16,7 +16,7 @@ classdef DENSE3Dviewer < DataViewer
     properties
         Handles
         Data
-        ActiveSegments = true(1, 17);
+        ActiveSegments = {true(1, 17); true(1, 12)};
         LineAppearance = struct('LineWidth', 2);
         AxesAppearance = struct( ...
             'LineWidth',    2, ...
@@ -87,6 +87,27 @@ classdef DENSE3Dviewer < DataViewer
             res = [max(frames(:,1)), min(frames(:,2))];
         end
 
+        function strains = regionalStrains(self)
+            function result = getStrains()
+                result = self.Data.regionalStrains();
+
+                % If this is BiVentricular remove the segments we don't
+                % want to keep
+                if numel(result) > 1
+                    allfields = fieldnames(result);
+                    allfields(ismember(allfields, {'CURE', 'RURE', 'LURE'})) = [];
+
+                    tokeep = [1:4, 7:10, 13:16];
+
+                    for m = 1:numel(allfields)
+                        result(2).(allfields{m}) = result(2).(allfields{m})(tokeep,:);
+                    end
+                end
+            end
+
+            strains = self.fetchCache('regionalStrain', @getStrains);
+        end
+
         function clearCache(self)
             self.cache = struct();
         end
@@ -117,7 +138,7 @@ classdef DENSE3Dviewer < DataViewer
             self.isAllowExportMat = ~isempty(self.Data);
         end
 
-        function file = exportExcel(obj, startpath)
+        function varargin = exportExcel(varargin)
             error(sprintf('%s:NotImplemented', mfilename), ...
                 'exportExcel not implemented yet');
         end
@@ -309,7 +330,7 @@ classdef DENSE3Dviewer < DataViewer
                 api.playbackFcn = [];
             end
 
-            strains = self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
+            strains = self.regionalStrains();
 
             api.deleteFcn = @deleteFcn;
             api.resizeFcn = @resizeFcn;
@@ -494,7 +515,6 @@ classdef DENSE3Dviewer < DataViewer
 
             hwait.String = 'Parameterizing the ventricle...';
 
-            self.Data.radialSample();
             self.Data.parameterize();
 
             drawnow
@@ -504,8 +524,6 @@ classdef DENSE3Dviewer < DataViewer
             self.Data.computeStrains();
 
             % Go ahead and fetch the regional strains
-            self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
-
             drawnow
         end
 
@@ -523,13 +541,20 @@ classdef DENSE3Dviewer < DataViewer
                 type = {type};
             end
 
-            strains = self.Data.Strains;
+            if regional
+                strains = self.regionalStrains();
+            else
+                strains = self.Data.Strains;
+            end
+
+            isBiV = numel(strains) > 1;
 
             hax = NaN;
             hpan = NaN;
             hplot = {};
             hbullax = NaN;
             hbull = [];
+            hrvbull = [];
 
             api.initFcn = @initFcn;
             api.playbackFcn = @playbackFcn;
@@ -542,28 +567,33 @@ classdef DENSE3Dviewer < DataViewer
                     return
                 end
 
-                nPlots = numel(hplot{1});
+                for k = 1:size(hplot, 2)
+                    nPlots = numel(hplot{1,k});
 
-                colors = num2cell(hsv(nPlots), 2);
+                    colors = num2cell(hsv(nPlots), 2);
 
-                visible = repmat({'on'}, nPlots, 1);
-                visible(~self.ActiveSegments) = {'off'};
+                    visible = repmat({'on'}, nPlots, 1);
+                    visible(~self.ActiveSegments{k}) = {'off'};
 
-                cdata = hbull.CData;
-                tf = ismember(cdata, find(~self.ActiveSegments));
+                    if k == 1
+                        bullhandle = hbull;
+                    else
+                        bullhandle = hrvbull;
+                    end
 
-                % Set the disabled segments to be partly transparent
-                alphadata = ones(size(tf));
-                alphadata(tf) = 0.3;
+                    cdata = bullhandle.CData;
+                    tf = ismember(cdata, find(~self.ActiveSegments{k}));
 
-                set(hbull, 'AlphaData', alphadata);
+                    % Set the disabled segments to be partly transparent
+                    alphadata = ones(size(tf));
+                    alphadata(tf) = 0.3;
 
-                for k = 1:numel(hplot)
-                    set(hplot{k}, {'Color'}, colors, {'Visible'}, visible)
+                    set(bullhandle, 'AlphaData', alphadata);
+
+                    for m = 1:size(hplot, 1)
+                        set(hplot{m,k}, {'Color'}, colors, {'Visible'}, visible)
+                    end
                 end
-
-                set(hbullax, 'clim', [1 nPlots])
-
             end
 
             function initFcn()
@@ -587,12 +617,21 @@ classdef DENSE3Dviewer < DataViewer
                 hrot = rotate3d(gcbf);
 
                 if regional
+
+                    if isBiV
+                        xlims = [-2, 1.2];
+                        ylims = [-1.2, 1.2];
+                    else
+                        xlims = [-1.2, 1.2];
+                        ylims = xlims;
+                    end
+
                     hbullax = axes( ...
                         'Parent', hflow, ...
                         'XTick', [], ...
                         'YTick', [], ...
-                        'XLim', [-1.2 1.2], ...
-                        'YLim', [-1.2 1.2], ...
+                        'XLim', xlims, ...
+                        'YLim', ylims, ...
                         'Color', 'none', ...
                         'XColor', get(hflow, 'BackgroundColor'), ...
                         'YColor', get(hflow, 'BackgroundColor'), ...
@@ -616,7 +655,19 @@ classdef DENSE3Dviewer < DataViewer
                         'LabelFormat', '%d', ...
                         'Parent', hbullax, ...
                         'Colormap', hsv, ...
-                        'ButtonDownFcn', @(s,e)clickBullseye(e));
+                        'CLim', [1 17], ...
+                        'ButtonDownFcn', @(s,e)clickBullseye(e, 1));
+
+                    if isBiV
+                        hrvbull = RVBullseye( ...
+                            'SegmentAverages', 1:12, ...
+                            'Labels', 'on', ...
+                            'LabelFormat', '%d', ...
+                            'Parent', hbullax, ...
+                            'Colormap', hsv, ...
+                            'CLim', [1 12], ...
+                            'ButtonDownFcn', @(s,e)clickBullseye(e, 2));
+                    end
 
                     axis(hbullax, 'equal')
                     axis(hbullax, 'tight')
@@ -626,7 +677,7 @@ classdef DENSE3Dviewer < DataViewer
                         'Click on a segment to toggle or'
                         'right-click to toggle all segments'
                     };
-                    text(0, -1.3, msg, 'Parent', hbullax, 'HorizontalAlignment', 'center', ...
+                    text(mean(xlims), -1.3, msg, 'Parent', hbullax, 'HorizontalAlignment', 'center', ...
                         'Color', self.dispclr);
 
                     colormap(gcbf, hsv);
@@ -637,41 +688,51 @@ classdef DENSE3Dviewer < DataViewer
                     'BorderType', 'none', ...
                     'BackgroundColor', get(self.hdisplay, 'BackgroundColor'));
 
-                strains = self.fetchCache('regionalStrain', @()self.Data.regionalStrains());
-
-                hplot = cell(nAxes, 1);
+                hplot = cell(nAxes, numel(strains));
                 hax = gobjects(nAxes, 1);
+
+                colors = [self.dispclr; self.dispclr];
+                linestyles = {'-', '--'};
 
                 for k = 1:nAxes
 
                     mapping = self.mappings.(type{k});
-
-                    if ~isfield(strains, type{k})
-                        strains.(type{k}) = mapping{2}(strains);
-                    else
-                        strains.(type{k}) = mapping{2}(strains.(type{k}));
-                    end
-
-                    values = strains.(type{k});
-
                     hax(k) = subplot(nAxes, 1, k, 'Parent', subpan);
                     set(hax(k), self.AxesAppearance);
 
                     ylabel(hax(k), mapping{1});
                     xlabel(hax(k), 'Frame')
 
-                    if ~regional
-                        values = mean(values(~any(isnan(values), 2), :), 1);
+                    for n = 1:numel(strains)
+                        strain = strains(n);
+
+                        if ~isfield(strain, type{k})
+                            strain.(type{k}) = mapping{2}(strain);
+                        else
+                            strain.(type{k}) = mapping{2}(strain.(type{k}));
+                        end
+
+                        values = strain.(type{k});
+
+                        if ~regional
+                            values = mean(values(~any(isnan(values), 2), :), 1);
+                        end
+
+                        hplot{k,n} = line(1:size(values, 2), values, 'Parent', hax(k), self.LineAppearance);
+
+                        nPlots = numel(hplot{k,n});
+
+                        if nPlots > 1
+                            set(hplot{k,n}, {'Color'}, num2cell(hsv(nPlots), 2), 'LineStyle', linestyles{n});
+                        else
+                            set(hplot{k,n}, 'Color', colors(n,:), 'LineStyle', linestyles{n})
+                        end
                     end
 
-                    hplot{k} = line(1:size(values, 2), values, 'Parent', hax(k), self.LineAppearance);
-
-                    nPlots = numel(hplot{k});
-
-                    if numel(hplot{k}) > 1
-                        set(hplot{k}, {'Color'}, num2cell(hsv(nPlots), 2));
-                    else
-                        set(hplot{k}, 'Color', self.dispclr)
+                    if numel(strains) > 1 && ~regional
+                        hleg = legend({'LV', 'RV'});
+                        set(hleg, 'EdgeColor', 'none', ...
+                            'Color', 'none', 'TextColor', self.dispclr)
                     end
                 end
 
@@ -691,17 +752,17 @@ classdef DENSE3Dviewer < DataViewer
                 playbackFcn();
             end
 
-            function clickBullseye(evnt)
+            function clickBullseye(evnt, index)
                 switch lower(get(gcf, 'SelectionType'))
                     case 'alt'
-                        sz = size(self.ActiveSegments);
-                        if ~all(self.ActiveSegments)
-                            self.ActiveSegments = true(sz);
+                        sz = size(self.ActiveSegments{index});
+                        if ~all(self.ActiveSegments{index})
+                            self.ActiveSegments{index} = true(sz);
                         else
-                            self.ActiveSegments = false(sz);
+                            self.ActiveSegments{index} = false(sz);
                         end
                     otherwise
-                        self.ActiveSegments(evnt.Segment) = ~self.ActiveSegments(evnt.Segment);
+                        self.ActiveSegments{index}(evnt.Segment) = ~self.ActiveSegments{index}(evnt.Segment);
                 end
 
 
@@ -784,21 +845,10 @@ classdef DENSE3Dviewer < DataViewer
 
                 meshes = {[self.Data.EpicardialMesh, self.Data.EndocardialMesh]};
 
-                hendo = patch( ...
-                    'Faces', self.Data.EndocardialMesh.faces, ...
-                    'Vertices', self.Data.EndocardialMesh.vertices, ...
-                    'FaceColor', 'w', ...
-                    'FaceAlpha', 0.5, ...
-                    'Parent', hax);
-
-                hold(hax, 'on')
-
-                hepi = patch( ...
-                    'Faces', self.Data.EpicardialMesh.faces, ...
-                    'Vertices', self.Data.EpicardialMesh.vertices, ...
-                    'FaceColor', 'w', ...
-                    'Parent', hax, ...
-                    'FaceAlpha', 0.5);
+                for k = 1:numel(meshes)
+                    hmeshes(k) = patch(meshes(k), 'FaceColor', 'w', 'FaceAlpha', 0.5, 'Parent', hax);
+                    hold(hax, 'on')
+                end
 
                 axis(hax, 'equal');
 
