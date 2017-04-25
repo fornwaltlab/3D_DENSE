@@ -4,8 +4,6 @@ classdef DENSE3D < hgsetget
         Apex
         Parameterization
         EndocardialMesh
-        EndocardialMesh
-        EpicardialMesh
         EpicardialMesh
         Interpolants
         LocalCoordinates
@@ -61,14 +59,26 @@ classdef DENSE3D < hgsetget
             reset(self);
         end
 
+        function bool = isBiventricular(self)
+            % isBiventricular - Check if this is biventricular data or not
+
+            bool = false;
+
+            if isempty(self.Data)
+                return
+            end
+
+            rois = [self.Data.ROIInfo];
+            types = {'SAFull', 'sadual', 'LAFull', 'ladual'};
+            bool = any(ismember(types, {rois.ROIType}));
+        end
+
         function reset(self)
             % reset - Resets all of the computed parameters because there
             % is either new data added or the ordering of the base/apex has
             % changed
 
             self.EndocardialMesh = [];
-            self.EndocardialMesh = [];
-            self.EpicardialMesh = [];
             self.EpicardialMesh = [];
             self.Interpolants = [];
             self.LocalCoordinates = [];
@@ -99,7 +109,6 @@ classdef DENSE3D < hgsetget
         end
 
         function output = save(self, varargin)
-
             parser = inputParser();
             parser.KeepUnmatched = true;
             parser.parse(varargin{:});
@@ -143,17 +152,22 @@ classdef DENSE3D < hgsetget
 
             %--- Displacement Info ---%
             if getfield(opts, 'DisplacementInfo', true)
-                DI.X = self.Strains.Locations(:,1);
-                DI.Y = self.Strains.Locations(:,2);
-                DI.Z = self.Strains.Locations(:,3);
+
+                points = self.samplePoints();
+                nPoints = size(points, 1);
+
+                DI.X = points(:,1);
+                DI.Y = points(:,2);
+                DI.Z = points(:,3);
+
+                frames = self.AnalysisFrames;
 
                 % Now sample the splines at these locations
-                DI.dX = zeros(size(self.Strains.Locations, 1), numel(frames));
-                DI.dY = zeros(size(self.Strains.Locations, 1), numel(frames));
-                DI.dZ = zeros(size(self.Strains.Locations, 1), numel(frames));
+                DI.dX = zeros(nPoints, numel(frames));
+                DI.dY = zeros(nPoints, numel(frames));
 
                 for k = 1:numel(frames)
-                    D = single(self.Interpolants(k).query(self.Strains.Locations));
+                    D = single(self.Interpolants(k).query(points));
                     DI.dX(:,k) = D(:,1);
                     DI.dY(:,k) = D(:,2);
                     DI.dZ(:,k) = D(:,3);
@@ -164,26 +178,32 @@ classdef DENSE3D < hgsetget
 
             %--- Strain Info ---%
             if getfield(opts, 'StrainInfo', true)
-                inds = dsearchn(self.EndocardialMesh.vertices, ...
-                                self.Strains.Locations);
 
-                SI.X = single(self.EndocardialMesh.vertices(:,1));
-                SI.Y = single(self.EndocardialMesh.vertices(:,2));
-                SI.Z = single(self.EndocardialMesh.vertices(:,3));
+                for endo = 1:numel(self.EndocardialMesh)
 
-                tmp = rmfield(self.Strains, {'Locations', 'Parameterization'});
+                    mesh = self.EndocardialMesh(endo);
+                    strains = self.Strains(endo);
 
-                fields = fieldnames(tmp);
+                    inds = dsearchn(mesh.vertices, strains.Locations);
 
-                nFrames = numel(self.Interpolants);
+                    SI.X = single(mesh.vertices(:,1));
+                    SI.Y = single(mesh.vertices(:,2));
+                    SI.Z = single(mesh.vertices(:,3));
 
-                for k = 1:numel(fields)
-                    values = accumarray(inds, 1:numel(inds), [], ...
-                        @(x){mean(tmp.(fields{k})(x,:),1)}, {nan(1, nFrames+1)});
-                    SI.(fields{k}) = single(cat(1, values{:}));
+                    tmp = rmfield(strains, {'Locations', 'Parameterization'});
+
+                    fields = fieldnames(tmp);
+
+                    nFrames = numel(self.Interpolants);
+
+                    for k = 1:numel(fields)
+                        values = accumarray(inds, 1:numel(inds), [], ...
+                            @(x){mean(tmp.(fields{k})(x,:),1)}, {nan(1, nFrames+1)});
+                        SI.(fields{k}) = single(cat(1, values{:}));
+                    end
+
+                    output.StrainInfo(endo) = SI;
                 end
-
-                output.StrainInfo = SI;
             end
 
             %--- Regional Strain Info ---%
@@ -198,7 +218,6 @@ classdef DENSE3D < hgsetget
         end
 
         function movie(self)
-
             points = self.Interpolants(1).Points;
 
             figure
@@ -211,10 +230,13 @@ classdef DENSE3D < hgsetget
 
             endo = self.EndocardialMesh;
 
-            inner = patch('Faces', endo.faces, 'Vertices', endo.vertices, 'FaceColor', 'w', 'FaceAlpha', 0.5);
+            for m = 1:numel(endo)
+                inner(m) = patch(endo(m), 'FaceColor', 'w', 'FaceAlpha', 0.5); %#ok
+            end
 
             epi = self.EpicardialMesh;
-            outer = patch('Faces', epi.faces, 'Vertices', epi.vertices, 'FaceColor', 'w', 'FaceAlpha', 0.5);
+
+            outer = patch(epi, 'FaceColor', 'w', 'FaceAlpha', 0.5);
 
             axis equal
             axis manual
@@ -223,9 +245,11 @@ classdef DENSE3D < hgsetget
 
                 frame = mod(k, numel(self.Interpolants)) + 1;
 
-                delta = self.Interpolants(frame).query(endo.vertices);
-                newpoints = endo.vertices + delta;
-                set(inner, 'Vertices', newpoints);
+                for m = 1:numel(endo)
+                    delta = self.Interpolants(frame).query(endo(m).vertices);
+                    newpoints = endo(m).vertices + delta;
+                    set(inner(m), 'Vertices', newpoints);
+                end
 
                 delta = self.Interpolants(frame).query(epi.vertices);
                 newpoints = epi.vertices + delta;
@@ -237,42 +261,36 @@ classdef DENSE3D < hgsetget
 
         function preview(self, cdata)
             figure;
-            patch( ...
-                'Faces', self.EndocardialMesh.faces, ...
-                'Vertices', self.EndocardialMesh.vertices, ...
-                'FaceColor', 'interp', ...
-                'FaceVertexCData', cdata);
 
-            hold on
-
-            inds = dsearchn(self.EndocardialMesh.vertices, ...
-                            self.EpicardialMesh.vertices);
-
-            patch( ...
-                'Faces', self.EpicardialMesh.faces, ...
-                'Vertices', self.EpicardialMesh.vertices, ...
-                'FaceColor', 'interp', ...
-                'FaceVertexCData', cdata(inds));
-
-            for k = 1:numel(self.Data)
-                roi = self.Data(k).ROIInfo.RestingContour3D;
-                plot3(roi{1}(:,1), roi{1}(:,2), roi{1}(:,3));
-                plot3(roi{2}(:,1), roi{2}(:,2), roi{2}(:,3));
+            if ischar(cdata)
+                if isfield(self.Strains, cdata)
+                    cdata = @(x)self.Strains(x).(cdata)(:,10);
+                elseif isfield(self.Parameterization, cdata)
+                    cdata = @(x)self.Parameterization(x).(cdata);
+                end
             end
 
-            plot3(self.Apex(1), self.Apex(2), self.Apex(3), 'r*');
+
+            for k = 1:numel(self.EndocardialMesh)
+                patch(self.EndocardialMesh(k), ...
+                    'FaceColor', 'interp', ...
+                    'FaceVertexCData', cdata(k));
+
+                hold on
+
+                apex = num2cell(self.Apex(k,:));
+                plot3(apex{:}, 'r*');
+            end
 
             axis equal
-
-            hold on
         end
 
-        function output = regionalStrains(self, nSegments)
+        function out = regionalStrains(self, nSegments)
             % Group strains based upon their parameterization
 
             % nSegments is: 16, 17 (default)
             if ~exist('nSegments', 'var');
-                nSegments = 17;
+                nSegments = [17, 19];
             end
 
             % Compute the strains if necessary
@@ -280,156 +298,208 @@ classdef DENSE3D < hgsetget
                 self.computeStrains()
             end
 
-            lsegments = linspace(0-eps, 1+eps, 5);
-            lsegments(end) = [];
+            out = [];
 
-            csegments = linspace(0-eps, 1+eps, 25);
-            csegments(end) = [];
+            for index = 1:numel(self.Strains)
+                strains = self.Strains(index);
 
-            % Shift these circumferential segments
+                lsegments = linspace(0-eps, 1+eps, 5);
+                lsegments(end) = [];
 
-            % Break it into 4 segments longitudinally
-            L = bsxfun(@lt, self.Strains.Parameterization.Longitudinal, lsegments);
-            C = bsxfun(@gt, self.Strains.Parameterization.Circumferential, csegments);
+                csegments = linspace(0-eps, 1+eps, 25);
+                csegments(end) = [];
 
-            Lseg = min(4 - cumsum(L, 2), [], 2);
-            Cseg = max(cumsum(C, 2), [], 2);
+                % Break it into 4 segments longitudinally
+                L = bsxfun(@lt, strains.Parameterization.Longitudinal, lsegments);
+                C = bsxfun(@gt, strains.Parameterization.Circumferential, csegments);
 
-            fields = fieldnames(self.Strains);
+                Lseg = min(4 - cumsum(L, 2), [], 2);
+                Cseg = max(cumsum(C, 2), [], 2);
 
-            indices = accumarray([Cseg(:), Lseg(:)], 1:size(L,1), [], @(x){x(:).'});
+                fields = fieldnames(strains);
 
-            % This is going to be your standard model
-            segments = {
-                [indices{21:24, 4}]
-                [indices{1:4,   4}]
-                [indices{5:8,   4}]
-                [indices{9:12,  4}]
-                [indices{13:16, 4}]
-                [indices{17:20, 4}]
+                indices = accumarray([Cseg(:), Lseg(:)], 1:size(L,1), [], @(x){x(:).'});
 
-                % Second longitudinal segment
-                [indices{21:24, 3}]
-                [indices{1:4,   3}]
-                [indices{5:8,   3}]
-                [indices{9:12,  3}]
-                [indices{13:16, 3}]
-                [indices{17:20, 3}]
+                switch nSegments(index)
+                    case {16, 17}
+                        % This is going to be your standard model
+                        segments = {
+                            [indices{21:24, 4}]
+                            [indices{1:4,   4}]
+                            [indices{5:8,   4}]
+                            [indices{9:12,  4}]
+                            [indices{13:16, 4}]
+                            [indices{17:20, 4}]
 
-                % Third longitudinal segment
-                [indices{[20:24 1], 2}]
-                [indices{2:7,    2}]
-                [indices{8:13,   2}]
-                [indices{14:19,  2}]
+                            % Second longitudinal segment
+                            [indices{21:24, 3}]
+                            [indices{1:4,   3}]
+                            [indices{5:8,   3}]
+                            [indices{9:12,  3}]
+                            [indices{13:16, 3}]
+                            [indices{17:20, 3}]
 
-                % Apex
-                [indices{:,1}]
-            };
+                            % Third longitudinal segment
+                            [indices{[20:24 1], 2}]
+                            [indices{2:7,    2}]
+                            [indices{8:13,   2}]
+                            [indices{14:19,  2}]
 
-            % Omit the apex if needed
-            if ismember(nSegments, [16, 18])
-                segments(end) = [];
-            end
+                            % Apex
+                            [indices{:,1}]
+                        };
+                    case {18, 19}
+                    % This is going to be your standard model
+                        segments = {
+                            [indices{21:24, 4}]
+                            [indices{1:4,   4}]
+                            [indices{5:8,   4}]
+                            [indices{9:12,  4}]
+                            [indices{13:16, 4}]
+                            [indices{17:20, 4}]
 
-            pts = self.Strains.Locations;
-            segs = zeros(size(pts(:,1)));
+                            % Second longitudinal segment
+                            [indices{21:24, 3}]
+                            [indices{1:4,   3}]
+                            [indices{5:8,   3}]
+                            [indices{9:12,  3}]
+                            [indices{13:16, 3}]
+                            [indices{17:20, 3}]
 
-            for k = 1:numel(segments)
-                segs(segments{k}) = k;
-            end
+                            % Third longitudinal segment
+                            [indices{21:24, 2}]
+                            [indices{1:4,   2}]
+                            [indices{5:8,   2}]
+                            [indices{9:12,  2}]
+                            [indices{13:16, 2}]
+                            [indices{17:20, 2}]
 
-            % Create output struct to save everything in
-            output = struct();
-            output.Segmentation = segments;
-
-            for k = 1:numel(fields)
-                value = self.Strains.(fields{k});
-
-                if isstruct(value)
-                    continue
+                            % Apex
+                            [indices{:,1}]
+                        };
+                    otherwise
+                        error(sprintf('%s:InvalidSegments', mfilename), ...
+                            'Segment number must be 16, 17, 18, or 19');
                 end
 
-                % Compute the mean value of whatever value this is within
-                % this particular segment
-                func = @(x)mean(self.Strains.(fields{k})(x,:), 1);
-                tmp = cellfun(func, segments, 'UniformOutput', 0);
-                output.(fields{k}) = cat(1, tmp{:});
+                % Omit the apex if needed
+                if ismember(nSegments(index), [16, 18])
+                    segments(end) = [];
+                end
+
+                pts = strains.Locations;
+                segs = zeros(size(pts(:,1)));
+
+                for k = 1:numel(segments)
+                    segs(segments{k}) = k;
+                end
+
+                % Create output struct to save everything in
+                output = struct();
+                output.Segmentation = segments;
+
+                for k = 1:numel(fields)
+                    value = strains.(fields{k});
+
+                    if isstruct(value)
+                        continue
+                    end
+
+                    % Compute the mean value of whatever value this is within
+                    % this particular segment
+                    func = @(x)mean(strains.(fields{k})(x,:), 1);
+                    tmp = cellfun(func, segments, 'UniformOutput', 0);
+                    output.(fields{k}) = cat(1, tmp{:});
+                end
+
+                if ismember(nSegments(index), [18, 19])
+                    lastinds = 13:18;
+                else
+                    lastinds = 13:16;
+                end
+
+                output.CURE = [CURE(output.CC(1:6,:).'), ...
+                            CURE(output.CC(7:12,:).'), ...
+                            CURE(output.CC(lastinds,:).')].';
+
+                output.RURE = [CURE(output.RR(1:6,:).'), ...
+                            CURE(output.RR(7:12,:).'), ...
+                            CURE(output.RR(lastinds,:).')].';
+
+                output.LURE = [CURE(output.LL(1:6,:).'), ...
+                            CURE(output.LL(7:12,:).'), ...
+                            CURE(output.LL(lastinds,:).')].';
+
+                output.CLShearAngle = rad2deg(self.torsion(output));
+
+                % Use the mean LV contraction as a reference
+                if index == 1
+                    reference = mean(output.p2, 1);
+                end
+
+                import plugins.dense3D_plugin.*
+
+                RD = RegionalDyssynchrony(permute(strains.p2, [1 3 2]));
+                delays = RD.computeRegionalDelays(reference);
+                output.DelayTimes = cellfun(@(x)mean(delays(x)), segments);
+
+                out = cat(2, out, output);
             end
-
-            import plugins.dense3D_plugin.*
-            RD = RegionalDyssynchrony(permute(self.Strains.p2, [1 3 2]));
-            delays = RD.computeRegionalDelays(mean(output.p2,1));
-            output.DelayTimes = cellfun(@(x)mean(delays(x)), segments);
-
-            % Compute CURE, RURE, and LURE
-
-            if ismember(nSegments, [18, 19])
-                lastinds = 13:18;
-            else
-                lastinds = 13:16;
-            end
-
-            output.CURE = [CURE(output.CC(1:6,:).'), ...
-                           CURE(output.CC(7:12,:).'), ...
-                           CURE(output.CC(lastinds,:).')].';
-
-            output.RURE = [CURE(output.RR(1:6,:).'), ...
-                           CURE(output.RR(7:12,:).'), ...
-                           CURE(output.RR(lastinds,:).')].';
-
-            output.LURE = [CURE(output.LL(1:6,:).'), ...
-                           CURE(output.LL(7:12,:).'), ...
-                           CURE(output.LL(lastinds,:).')].';
-
-            output.CLShearAngle = rad2deg(self.torsion(output));
-        end
-
-        function rDelays = regionalDelays(self)
-            regional = self.regionalStrains();
-            strain = self.Strains.p2;
-
-            RD = RegionalDyssynchrony(permute(strain, [1 3 2]));
-            delays = RD.computeRegionalDelays(mean(regional.p2,1));
-
-            rDelays = cellfun(@(x)mean(delays(x)), regional.Segmentation) * 100;
         end
 
         function computeStrains(self)
 
-            mesh = self.EndocardialMesh;
-            points = self.RadialParams.Points;
-            self.Strains = queryStrains(mesh, points, self.Apex, ...
-                                        self.Interpolants);
+            if isempty(self.Parameterization)
+                self.parameterize();
+            end
 
-            % Figure out the radial/circumferential/longitudinal positions
-            inds = dsearchn(mesh.vertices, points);
+            points = self.samplePoints();
 
-            self.Strains.Locations = points;
+            % Determine the "ownership" of each point.
+            [~, epidist] = dsearchn(self.EpicardialMesh.vertices, points);
 
-            p.Circumferential = self.Parameterization.Circumferential(inds);
-            p.Longitudinal = self.Parameterization.Longitudinal(inds);
-            p.Radial = self.RadialParams.Laplacian;
+            nEndo = numel(self.EndocardialMesh);
 
-            self.Strains.Parameterization = p;
-        end
+            [indices, endodist] = deal(nan(size(points, 1), nEndo));
 
-        function coordinates(self)
+            for k = 1:nEndo
+                [indices(:,k), endodist(:,k)] = dsearchn(self.EndocardialMesh(k).vertices, points);
+            end
 
-            endo = self.EndocardialMesh;
+            if self.isBiventricular()
+                % Only need this in the biventricular case
+                isSeptum = all(bsxfun(@lt, endodist, epidist), 2);
+            else
+                isSeptum = false(size(epidist));
+            end
 
-            % Compute the normal for each face
-            N = normr(normals(endo.vertices, endo.faces));
+            % Find the closest endo to each point
+            [~, endo_ownership] = min(endodist, [], 2);
 
-            % Compute the centroid of each face
-            centers = barycenter(endo.vertices, endo.faces);
+            % Now re-assign the septum such that it doesn't belong to any
+            % particular ventricle
+            endo_ownership(isSeptum) = 0;
 
-            [R,C,L] = localcoordinates(N, centers, self.Apex);
+            self.Strains = [];
 
-            self.LocalCoordinates = struct( ...
-                'Points', centers, ...
-                'Radial', R, ...
-                'Circumferential', C, ...
-                'Longitudinal', L);
+            for k = 1:numel(self.EndocardialMesh)
+                % Use the septal datapoints and the ones that belong to
+                % this ventricle
+                touse = isSeptum | endo_ownership == k;
+
+                strains = queryStrains(self.EndocardialMesh(k), ...
+                    points(touse,:), self.Apex(k,:), self.Interpolants);
+
+                inds = indices(touse, k);
+
+                param.Circumferential = self.Parameterization(k).Circumferential(inds);
+                param.Longitudinal = self.Parameterization(k).Longitudinal(inds);
+
+                strains.Parameterization = param;
+                strains.Locations = points(touse,:);
+
+                self.Strains = cat(2, self.Strains, strains);
+            end
         end
 
         function self = DENSE3D(matfiles)
@@ -449,7 +519,7 @@ classdef DENSE3D < hgsetget
             frames = self.AnalysisFrames;
 
             self.Interpolants = displacementSplines(self.Data, ...
-                frames(1):frames(end), varargin{:});
+                frames(1):frames(end), self.Flip, varargin{:});
         end
 
         function uipath = addData(self, data, description)
@@ -506,7 +576,6 @@ classdef DENSE3D < hgsetget
         end
 
         function peaks = peakStrains(self)
-
             ops.RR = @(x)max(x, [], 2);
             ops.CC = @(x)min(x, [], 2);
             ops.LL = @(x)min(x, [], 2);
@@ -515,11 +584,13 @@ classdef DENSE3D < hgsetget
 
             fields = fieldnames(ops);
 
-            peaks = struct();
+            peaks = repmat(struct(), size(regional));
 
             for k = 1:numel(fields)
                 op = ops.(fields{k});
-                peaks.(fields{k}) = op(regional.(fields{k}));
+                for n = 1:numel(regional)
+                    peaks(n).(fields{k}) = op(regional(n).(fields{k}));
+                end
             end
         end
 
@@ -529,10 +600,7 @@ classdef DENSE3D < hgsetget
             base = self.Data(baseindex).SequenceInfo(1);
         end
 
-        function radialSample(self)
-            endo = self.EndocardialMesh;
-            epi = self.EpicardialMesh;
-
+        function R = rotationMatrix(self)
             % Rotate these so that the normal is facing up
             desired = [0 0 1];
 
@@ -541,28 +609,29 @@ classdef DENSE3D < hgsetget
             normal = cross(base.ImageOrientationPatient(1:3), ...
                            base.ImageOrientationPatient(4:6));
 
-            theta = acos(dot(desired, normal));
-            vec = cross(desired, normal);
+            R = aa2mat(cross(desired, normal), ...
+                       acos(dot(desired, normal)));
+        end
 
-            R = aa2mat(vec, theta);
+        function [coordinates, epimask, endomask, myomask] = samplePoints(self, spacing)
 
+            if isempty(self.EpicardialMesh)
+                self.generateMeshes();
+            end
+
+            if ~exist('spacing', 'var')
+                spacing = 2.0;
+            end
+
+            epi = self.EpicardialMesh;
+
+            R = self.rotationMatrix();
             center = mean(epi.vertices, 1);
 
-            % Vert a list of ALL vertices
-            demeaned = bsxfun(@minus, epi.vertices, center);
-            verts = bsxfun(@plus, demeaned * R, center);
-            epi.vertices = verts;
+            epi = self.rotateMesh(epi, R, center);
 
-            demeaned = bsxfun(@minus, endo.vertices, center);
-            verts = bsxfun(@plus, demeaned * R, center);
-
-            endo.vertices = verts;
-
+            % Figure out the extent of the meshes
             limits = [min(epi.vertices, [], 1); max(epi.vertices, [], 1)];
-
-            spacing = 2.0;
-
-            % Expand the limits by 3 * spacing
             limits(1,:) = limits(1,:) - 3 * spacing;
             limits(2,:) = limits(2,:) + 3 * spacing;
 
@@ -570,28 +639,52 @@ classdef DENSE3D < hgsetget
             Y = limits(1,2):spacing:limits(2,2);
             Z = limits(1,3):spacing:limits(2,3);
 
-            endomask = inpolyhedron(endo.faces, endo.vertices, X, Y, Z, 'FlipNormals', true);
+            % Pre-allocate
+            endomask = cell(size(self.EndocardialMesh));
+
+            for k = 1:numel(self.EndocardialMesh)
+                endo = self.rotateMesh(self.EndocardialMesh(k), R, center);
+                endomask{k} = inpolyhedron(endo.faces, endo.vertices, ...
+                    X, Y, Z, 'FlipNormals', true);
+            end
+
             epimask = inpolyhedron(epi.faces, epi.vertices, X, Y, Z, 'FlipNormals', true);
-
-            result = ones(size(epimask), 'single');
-            result(epimask) = 0.5;
-            result(endomask) = 0;
-
-            laplacian = relaxationLaplacian3D(result, result == 0.5);
 
             [xx,yy,zz] = meshgrid(X, Y, Z);
 
-            ismyo = epimask & ~endomask;
+            % Do an OR across all endo masks
+            myomask = epimask & ~any(cat(4, endomask{:}), 4);
+            coordinates = [xx(myomask), yy(myomask), zz(myomask)];
 
-            X = xx(ismyo);
-            Y = yy(ismyo);
-            Z = zz(ismyo);
-            L = laplacian(ismyo);
+            % Transform these coordinates back to their normal locations
+            demeaned = bsxfun(@minus, coordinates, center);
+            coordinates = bsxfun(@plus, demeaned * R.', center);
+        end
 
-            % Convert these back to their normal coordinates
-            XYZ = [X, Y, Z];
+        function radialSample(self)
 
-            XYZ = bsxfun(@plus, bsxfun(@minus, XYZ, center) * R.', center);
+            if self.isBiventricular()
+                error(sprintf('%s:NotImplemented', mfilename), ...
+                    'Transmural strains not yet implemented for biventricular DENSE')
+            end
+
+            [XYZ, epimask, endomask, myomask] = self.samplePoints();
+
+            % Rotate through each of the endocardial masks and compute the
+            % laplacian for each. Then we'll take the minimum of all of
+            % them
+
+            laplacian = nan(size(epimask));
+
+            for k = 1:numel(endomask)
+                result = ones(size(epimask), 'single');
+                result(myomask) = 0.5;
+                result(endomask{k}) = 0;
+
+                laplacian = min(laplacian, relaxationLaplacian3D(result, myomask));
+            end
+
+            L = laplacian(myomask);
 
             self.RadialParams.Points = XYZ;
             self.RadialParams.Laplacian = L;
@@ -616,14 +709,21 @@ classdef DENSE3D < hgsetget
                 normal = -normal;
             end
 
-            [verts, faces] = half_space_intersect( ...
-                self.EndocardialMesh.vertices, ...
-                self.EndocardialMesh.faces, ...
-                base.ImagePositionPatient, ...
-                normal, 'Cap', false);
+            empty = cell(size(self.EndocardialMesh));
+            meshes = struct('faces', empty, 'vertices', empty);
 
-            self.EndocardialMesh = struct('faces', faces, ...
-                'vertices', verts);
+            for k = 1:numel(self.EndocardialMesh)
+                [verts, faces] = half_space_intersect( ...
+                    self.EndocardialMesh(k).vertices, ...
+                    self.EndocardialMesh(k).faces, ...
+                    base.ImagePositionPatient, ...
+                    normal, 'Cap', false);
+
+                meshes(k).vertices = verts;
+                meshes(k).faces = faces;
+            end
+
+            self.EndocardialMesh = meshes;
 
             [verts, faces] = half_space_intersect( ...
                 self.EpicardialMesh.vertices, ...
@@ -636,21 +736,119 @@ classdef DENSE3D < hgsetget
         end
 
         function parameterize(self)
+            % Compute the parameterization for each endocardial mesh
 
-            msh = self.EndocardialMesh;
+            if isempty(self.EndocardialMesh)
+                self.generateMeshes();
+            end
+            func = @self.parameterizeEndocardialMesh;
+            nEndo = numel(self.EndocardialMesh);
+            self.Parameterization = arrayfun(func, 1:nEndo);
+        end
 
-            long = longitudinalParameterization(msh.vertices, msh.faces, self.Apex);
+        function insertion = anteriorInsertion(self)
+            % If this is single ventricle
+            if self.isBiventricular()
+                % THING to produce the anterior insertion LINE
 
-            self.Parameterization.Longitudinal = long;
+                epioutline = ordered_outline(self.EpicardialMesh.faces);
+                epioutline = self.EpicardialMesh.vertices(epioutline,:);
+
+                % Find the EPI point that is equidistance from each contour
+                outlines = cell(size(self.EndocardialMesh));
+
+                nEndo = numel(self.EndocardialMesh);
+
+                [epidist, epidistind] = deal(nan(size(epioutline, 1), nEndo));
+
+                for k = 1:nEndo
+                    msh = self.EndocardialMesh(k);
+                    OOL = ordered_outline(msh.faces);
+                    OOL = msh.vertices(OOL,:);
+
+                    % Compute the point-wise distance between this and the
+                    % EPI
+                    distances = bsxfun(@minus, epioutline.', permute(OOL, [2 3 1]));
+                    distances = squeeze(sum(distances.^2, 1));
+
+                    [epidist(:,k), epidistind(:,k)] = min(distances, [], 2);
+
+                    outlines{k} = OOL;
+                end
+
+                % Repeat the last point
+                epidist = epidist([1:end 1],:);
+
+                % Find where the endos cross
+                sgn = sign(diff(epidist, [], 2));
+
+                % Find the inferior and anterior insertion points
+                insert  = find(sgn == 1, 1, 'first');
+                indices = num2cell(epidistind(insert,:));
+                tmp     = cellfun(@(x,y)x(y,:), outlines, indices, 'uni', 0);
+                one     = mean(cat(1, epioutline(insert,:), tmp{:}));
+
+                insert  = find(sgn == 1, 1, 'last');
+                indices = num2cell(epidistind(insert,:));
+                tmp     = cellfun(@(x,y)x(y,:), outlines, indices, 'uni', 0);
+                two     = mean(cat(1, epioutline(insert,:), tmp{:}));
+
+                % Now we need to figure out which one of these is the
+                % anterior one
+                centers = cellfun(@(x)mean(x, 1), outlines, 'uni', 0);
+
+                N = cross(centers{2} - centers{1}, ...
+                          self.Apex(1,:) - centers{1});
+
+                insertions = [one; two];
+
+                % Positive distance is going to be inferior
+                side = sign(point2planeDistance([one; two], centers{1}, N));
+
+                assert(isequal(sort(side(:)), [-1; 1]), ...
+                    'Insertion point error');
+
+                anterior = insertions(side == 1, :);
+                % inferior = insertions(side == -1, :);
+
+                % Just return the anterior for now
+                insertion = anterior;
+            else
+                [base, baseindex] = self.basalSlice();
+                analysis = self.Data(baseindex).AnalysisInfo;
+
+                % Rotate the insertion point by pi/3
+                theta = (2 * pi) / analysis.Nmodel;
+
+                % Rotate the other way if we need it to go clockwise
+                if analysis.Clockwise
+                    theta = -theta;
+                end
+
+                % Create a rotation matrix to shift the anterior insertion
+                % to the correct location
+                R = [cos(theta), -sin(theta);
+                     sin(theta), cos(theta)];
+
+                center = analysis.PositionA;
+                insertion2D = ((analysis.PositionB - center) * R) + center;
+                insertion = tformfwd(base.tform, [insertion2D, 0]);
+            end
+        end
+
+        function params = parameterizeEndocardialMesh(self, index)
+            msh = self.EndocardialMesh(index);
+            apex = self.Apex(index,:);
+
+            long = longitudinalParameterization(msh.vertices, msh.faces, apex);
+
+            params.Longitudinal = long;
 
             % Circumferential parameterization
 
-            [base, baseindex] = self.basalSlice();
-            analysis = self.Data(baseindex).AnalysisInfo;
-
             % Take into account that PositionB is the right-most so we need
             % to shift our parameterization by 1/6 later on
-            insertion = tformfwd(base.tform, [analysis.PositionB, 0]);
+            insertion = self.anteriorInsertion();
 
             % For each isoline find the point that is closest to the
             % insertion
@@ -660,10 +858,11 @@ classdef DENSE3D < hgsetget
             isolines([1 end]) = [];
 
             points = zeros(0, 3);
-            params = zeros(0, 1);
+            cparam = zeros(0, 1);
+
 
             % Find the point in the mesh that corresponds to the apex
-            [~, apexind] = ismember(self.Apex, msh.vertices, 'rows');
+            [~, apexind] = ismember(apex, msh.vertices, 'rows');
 
             for k = 1:numel(isolines)
                 % Draw an isoline at this particular value
@@ -705,7 +904,7 @@ classdef DENSE3D < hgsetget
                 % contour orientation
                 tmp = normr(bsxfun(@minus, isoline, mean(isoline, 1)));
                 mean_norm = mean(cross(tmp(1:end-1,:), tmp(2:end,:)),1);
-                D = point2planeDistance(self.Apex, isoline(1,:), mean_norm);
+                D = point2planeDistance(apex, isoline(1,:), mean_norm);
 
                 % If the apex was not on the "correct" side, then the
                 % orientation of the contour was the opposite of what we
@@ -715,20 +914,20 @@ classdef DENSE3D < hgsetget
                 end
 
                 points = cat(1, points, isoline);
-                params = cat(1, params, arclength(:));
+                cparam = cat(1, cparam, arclength(:));
             end
 
             % Shift the parameterization by 1/6 to account for PositionB
             % being the EDGE of segment 1 and not the LV insertion
-            params = mod(params - (1/6), 1);
+            % XXX This is now handled by anteriorInsertion itself
+            %cparam = mod(cparam - (1/6), 1);
 
             % Try to get Circ locations for each vertex in the initial mesh
             inds = dsearchn(points, msh.vertices);
-            self.Parameterization.Circumferential = params(inds);
+            params.Circumferential = cparam(inds);
         end
 
         function apex = autoApex(self)
-
             apx = self.Data(self.apicalSlice).SequenceInfo(1);
 
             % Figure out what side the basal slice is on
@@ -749,11 +948,19 @@ classdef DENSE3D < hgsetget
                 func = @max;
             end
 
-            vertices = self.EndocardialMesh.vertices;
-            dists = point2planeDistance(vertices, aIPP, normal);
+            apex = zeros(numel(self.EndocardialMesh), 3);
 
-            [~, apexind] = func(dists);
-            apex = vertices(apexind,:);
+            for k = 1:numel(self.EndocardialMesh)
+                vertices = self.EndocardialMesh(k).vertices;
+                dists = point2planeDistance(vertices, aIPP, normal);
+
+                % Take the mean of all vertices that are equally far
+                apexind = dists == func(dists);
+                apex(k,:) = mean(vertices(apexind,:), 1);
+            end
+
+            % apex is an M x 3 matrix where it contains the apex of each of
+            % the M endocardial meshes
         end
 
         function generateMeshes(self)
@@ -765,14 +972,17 @@ classdef DENSE3D < hgsetget
             self.EpicardialMesh = surfacemesh(cat(1, rois{:,1}));
             self.EndocardialMesh = surfacemesh(cat(1, rois{:,2}));
 
+            if isBiventricular(self)
+                self.EndocardialMesh(2) = surfacemesh(cat(1, rois{:,3}), 1);
+            end
+
             self.Apex = self.autoApex();
 
+            % Remove the mesh vertices that are above the basal slice
             self.pruneMesh();
-
-            % Chop these off using the most basal slice
         end
 
-        function data = two2three(self, data)
+        function data = two2three(~, data)
             % Converts all 2D contours to 3D contours
 
             roi = data.ROIInfo;
@@ -805,10 +1015,15 @@ classdef DENSE3D < hgsetget
             result = -asin(2 * strains.CL ./ ...
                 sqrt((1 + 2 * strains.CC) .* (1 + 2 * strains.LL)));
         end
+
+        function msh = rotateMesh(msh, R, center)
+            demeaned = bsxfun(@minus, msh.vertices, center);
+            msh.vertices = bsxfun(@plus, demeaned * R, center);
+        end
     end
 end
 
-function splines = displacementSplines(data, frames, progressfunc)
+function splines = displacementSplines(data, frames, flip, progressfunc)
 
     if ~exist('progressfunc', 'var')
         progressfunc = @(x,y)fprintf('Processing frame %d of %d\n', x, y);
@@ -824,6 +1039,10 @@ function splines = displacementSplines(data, frames, progressfunc)
     Xdata = cat(4, images.Xunwrap);
     Ydata = cat(4, images.Yunwrap);
     Zdata = cat(4, images.Zunwrap);
+
+    if flip
+        Zdata = -Zdata;
+    end
 
     % Now select only the frames that we care about (the 3rd dimension)
     Xdata = Xdata(:,:,frames,:);
@@ -885,10 +1104,7 @@ function splines = displacementSplines(data, frames, progressfunc)
             Zdata(locs) = dz;
 
             % Subtract the displacements from the points
-
             xyz_world = tformfwd(seq.tform, rc);
-
-
             XYZ{slice} = xyz_world - [dx, dy, dz];
         end
 
@@ -907,7 +1123,6 @@ function splines = displacementSplines(data, frames, progressfunc)
         xyz = single(xyz);
 
         RBFs{frame} = RBFInterpolator(xyz, disps, 'Type', RBFInterpolator.LINEAR);
-        disp frame
     end
 
     splines = cat(1, RBFs{:});
@@ -940,6 +1155,7 @@ function mask = relaxationLaplacian3D(mask, innervals)
 end
 
 function M = aa2mat(ax, theta)
+    % Convert axis/angle notation to a rotation matrix
     s = sin(theta);
     c = cos(theta);
     t = 1 - c;
