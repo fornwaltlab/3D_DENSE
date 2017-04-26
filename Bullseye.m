@@ -159,6 +159,12 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot & matlab.mixin.Heterogeneous
         end
     end
 
+    methods (Sealed)
+        function disp(self)
+            disp@plugins.dense3D_plugin.HGParrot(self)
+        end
+    end
+
     methods (Access = 'protected')
         function bool = hasApex(self)
             bool = self.Segments == 17;
