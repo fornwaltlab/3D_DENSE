@@ -1,4 +1,4 @@
-classdef Bullseye < plugins.dense3D_plugin.HGParrot
+classdef Bullseye < plugins.dense3D_plugin.HGParrot & matlab.mixin.Heterogeneous
 
     properties (SetObservable)
         AngularOffset   = 2*pi/3    % Angular offset of bullseye
@@ -85,13 +85,18 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         end
 
         function set.CData(self, value)
+
+            if isequal(value, self.CData)
+                return
+            end
+
             if ~isnumeric(value)
                 error(sprintf('%s:InvalidValue', mfilename), ...
                     'CData must be numeric')
             end
 
             self.CData = value;
-            self.resetCache();
+            self.resetCache('CData');
             self.refresh();
         end
 
@@ -134,8 +139,12 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         end
 
         function set.Segments(self, value)
+            if isequal(value, self.Segments)
+                return
+            end
+
             self.Segments = value;
-            self.resetCache();
+            self.resetCache('Segments');
             self.refresh();
         end
 
@@ -450,7 +459,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             end
         end
 
-        function resetCache(self)
+        function resetCache(self, propname)
             self.cache = struct();
         end
     end
