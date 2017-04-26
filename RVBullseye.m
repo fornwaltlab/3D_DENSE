@@ -25,9 +25,31 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
         function set.MinorAxis(self, value)
             self.Radius = value;
         end
+
+        function resetRVCache(self)
+            self.rvcache = struct();
+        end
     end
 
     methods (Access = 'protected')
+
+        function resetCache(self, propname)
+            old = self.cache;
+
+            resetCache@plugins.dense3D_plugin.Bullseye(self, propname)
+
+            fields = {'ahalines', 'surfcoords', 'centers'};
+
+            if strcmpi(propname, 'CData')
+                tocheck = isfield(old, fields);
+                fields = fields(tocheck);
+
+                for k = 1:numel(fields)
+                    self.cache.(fields{k}) = old.(fields{k});
+                end
+            end
+        end
+
         function bool = hasApex(self)
             bool = ismember(self.Segments, [13, 19]);
         end
@@ -82,29 +104,43 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
         end
 
         function [X, Y, Z] = ahalines(self)
-            [X, Y] = self.getSpokes(100);
+
+            if ~isfield(self.cache, 'ahalines')
+                [X, Y] = self.getSpokes(100);
+                self.cache.ahalines = [X(:), Y(:)];
+            else
+                tmp = self.cache.ahalines;
+                X = tmp(:,1); Y = tmp(:,2);
+            end
+
             Z = zeros(size(X)) + self.ZData + 0.01;
         end
 
         function centers = segmentCenters(self)
 
-            [tx, ty] = self.getSampledPoints(self.MinorAxis, ...
-                self.MajorAxis, 7, 9);
+            if ~isfield(self.cache, 'centers')
+                [tx, ty] = self.getSampledPoints(self.MinorAxis, ...
+                    self.MajorAxis, 7, 9);
 
-            tx(1:2:end,:) = [];
-            ty(1:2:end,:) = [];
-            tx(:,1:2:end) = [];
-            ty(:,1:2:end) = [];
+                tx(1:2:end,:) = [];
+                ty(1:2:end,:) = [];
+                tx(:,1:2:end) = [];
+                ty(:,1:2:end) = [];
 
-            tx = tx.';
-            ty = ty.';
+                tx = tx.';
+                ty = ty.';
 
-            centers = [tx(:), ty(:)];
+                centers = [tx(:), ty(:)];
 
-            % Fill in some NaN values
-            pad = nan(max(self.validSegments) - size(centers, 1), 2);
+                % Fill in some NaN values
+                pad = nan(max(self.validSegments) - size(centers, 1), 2);
 
-            centers = cat(1, centers, pad);
+                centers = cat(1, centers, pad);
+
+                self.cache.centers = centers;
+            else
+                centers = self.cache.centers;
+            end
         end
 
         function res = validSegments(~)
@@ -122,7 +158,7 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
 
             % TODO: Consider passing only parent parameters here and then
             % set the others later
-            self@plugins.dense3D_plugin.Bullseye('Segments', 12, 'AngularOffset', 0, 'CData', 1);
+            self@plugins.dense3D_plugin.Bullseye('Segments', 12, 'AngularOffset', 0, 'CData', 0);
 
             % Now specify all other parameters
             if numel(varargin)
@@ -132,13 +168,17 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
 
         function [X, Y] = computeCoordinates(self, sz, varargin)
             % Determine the coordinates for the surface
+            if ~isfield(self.cache, 'surfcoords') || ~isequal(self.cache.surfcoords{3}, sz)
+                [X, Y] = self.getSampledPoints(self.MinorAxis, self.MajorAxis, ...
+                                sz(1) + 1, sz(2) + 1, strcmpi(self.Apex, 'on'));
 
-            [X, Y] = self.getSampledPoints(self.MinorAxis, ...
-                                           self.MajorAxis, ...
-                                           sz(1) + 1, sz(2) + 1, strcmpi(self.Apex, 'on'));
+                X = rot90(X, 2);
+                Y = rot90(Y, 2);
 
-            X = rot90(X, 2);
-            Y = rot90(Y, 2);
+                self.cache.surfcoords = {X, Y, sz};
+            else
+                [X, Y, ~] = self.cache.surfcoords{:};
+            end
         end
     end
 
