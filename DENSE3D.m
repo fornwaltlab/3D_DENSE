@@ -160,7 +160,7 @@ classdef DENSE3D < hgsetget
                 DI.Y = points(:,2);
                 DI.Z = points(:,3);
 
-                frames = self.AnalysisFrames;
+                frames = colon(self.AnalysisFrames);
 
                 % Now sample the splines at these locations
                 DI.dX = zeros(nPoints, numel(frames));
@@ -531,10 +531,10 @@ classdef DENSE3D < hgsetget
 
         function interpolate(self, varargin)
 
-            frames = self.AnalysisFrames;
+            frames = colon(self.AnalysisFrames);
 
             self.Interpolants = displacementSplines(self.Data, ...
-                frames(1):frames(end), self.Flip, varargin{:});
+                frames, self.Flip, varargin{:});
         end
 
         function uipath = addData(self, data, description)
