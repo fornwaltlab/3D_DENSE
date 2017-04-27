@@ -239,8 +239,12 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
                                                  bullseyeOrigin, ...
                                                  bullseyeRadius);
 
+
                 % Find all of the angles here
                 [angles, ~] = cart2pol(xx, yy);
+                [angles, inds] = unique(angles, 'stable');
+                xx = xx(inds);
+                yy = yy(inds);
                 angles = mod(angles, 2*pi);
 
                 [~, argmin] = min(angles);
@@ -261,7 +265,7 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
                 end
 
                 tt = linspace(min(angles), max(angles), nPoints);
-                vals = fnval(csape(angles, [xx(:), yy(:)]'), tt)';
+                vals = interp1(angles, [xx(:), yy(:)], tt);
 
                 X(k,:) = vals(:,1);
                 Y(k,:) = vals(:,2);
