@@ -211,6 +211,21 @@ classdef DENSE3D < hgsetget
                 RSI = self.regionalStrains();
                 RSI = rmfield(RSI, {'Segmentation', 'Locations'});
 
+                if numel(RSI) > 1
+                    % Only export the important segments of the RV
+                    tokeep = [1:4 7:10 13:16 19];
+
+                    fields = fieldnames(RSI);
+
+                    for k = 1:numel(fields)
+                        tmp = RSI(2).(fields{k});
+
+                        if size(tmp, 1) == 19
+                            RSI(2).(fields{k}) = tmp(tokeep,:);
+                        end
+                    end
+                end
+
                 output.RegionalStrainInfo = RSI;
             end
 
