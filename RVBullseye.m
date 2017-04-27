@@ -106,7 +106,7 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
         function [X, Y, Z] = ahalines(self)
 
             if ~isfield(self.cache, 'ahalines')
-                [X, Y] = self.getSpokes(100);
+                [X, Y] = self.getSpokes(10);
                 self.cache.ahalines = [X(:), Y(:)];
             else
                 tmp = self.cache.ahalines;
