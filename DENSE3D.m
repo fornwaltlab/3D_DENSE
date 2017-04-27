@@ -104,8 +104,16 @@ classdef DENSE3D < hgsetget
             end
         end
 
+        function bool = shortAxisSlices(self)
+            rois = [self.Data.ROIInfo];
+            bool = strwcmpi({rois.ROIType}, '*sa*');
+        end
+
         function index = apicalSlice(self)
-            index = numel(self.Data);
+            % Only consider short-axis slices here. Determine this based
+            % upon the type of contour that's drawn
+
+            index = find(self.shortAxisSlices(), 1, 'last');
         end
 
         function output = save(self, varargin)
@@ -613,7 +621,7 @@ classdef DENSE3D < hgsetget
 
         function [base, baseindex] = basalSlice(self)
             % basalSlice - Returns information about the basal slice
-            baseindex = 1;
+            baseindex = find(self.shortAxisSlices(), 1, 'first');
             base = self.Data(baseindex).SequenceInfo(1);
         end
 
@@ -1102,8 +1110,6 @@ function splines = displacementSplines(data, frames, flip, progressfunc)
             % Convert the rows/columns to XYZ
             inds = indices{slice, frame};
             rc = [col(inds), row(inds), zeros(size(inds))];
-
-
 
             % Convert the displacements from image coordinates to world
             % coordinates
