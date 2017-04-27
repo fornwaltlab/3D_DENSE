@@ -794,24 +794,32 @@ classdef DENSE3D < hgsetget
                 end
 
                 % Repeat the last point
-                epidist = epidist([1:end 1],:);
+                epidist     = epidist([1:end 1],:);
+                epidistind  = epidistind([1:end 1],:);
 
-                % Find where the endos cross
+                % Find where the endos cross which will give us the
+                % indices of the anterior and inferior insertion points
                 sgn = sign(diff(epidist, [], 2));
+                insertions = logical(diff(sgn));
 
-                % Find the inferior and anterior insertion points
-                insert  = find(sgn == 1, 1, 'first');
-                indices = num2cell(epidistind(insert,:));
-                tmp     = cellfun(@(x,y)x(y,:), outlines, indices, 'uni', 0);
-                one     = mean(cat(1, epioutline(insert,:), tmp{:}));
+                % Make sure that we only picked up two of them
+                assert(sum(insertions) == 2, ...
+                    'Found more than two insertion points!');
 
-                insert  = find(sgn == 1, 1, 'last');
-                indices = num2cell(epidistind(insert,:));
-                tmp     = cellfun(@(x,y)x(y,:), outlines, indices, 'uni', 0);
-                two     = mean(cat(1, epioutline(insert,:), tmp{:}));
+                % Now compute the XYZ coordinates of each of these two
+                % points by averaging the closest points on the endos and
+                % epicardial boundary
+                indices = num2cell(epidistind(insertions,:));
+                epipoints = epioutline(insertions,:);
 
-                % Now we need to figure out which one of these is the
-                % anterior one
+                tmp = cellfun(@(x,y)x(y,:), outlines, indices(1,:), 'uni', 0);
+                one = mean(cat(1, epipoints(1,:), tmp{:}));
+
+                tmp = cellfun(@(x,y)x(y,:), outlines, indices(2,:), 'uni', 0);
+                two = mean(cat(1, epipoints(2,:), tmp{:}));
+
+                % Figure out which one is actually the anterior one by
+                % using the cross product with a vector to the apex
                 centers = cellfun(@(x)mean(x, 1), outlines, 'uni', 0);
 
                 N = cross(centers{2} - centers{1}, ...
