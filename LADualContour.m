@@ -26,7 +26,7 @@ classdef LADualContour < ROIType
 
             cdata = ind2rgb(cdata, cmap);
 
-            self@ROIType('hladual', 'Long Axis Dual Ventricle', 3, 'ladual', cdata, false, true);
+            self@ROIType('hladual', 'Long Axis Dual Ventricle', 3, 'ladual', cdata, false, true, {'r', 'g', 'y'});
         end
 
         function [pos, iscls, iscrv, iscrn] = drawContour(self, hax, varargin)
