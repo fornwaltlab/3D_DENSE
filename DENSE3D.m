@@ -1017,8 +1017,10 @@ classdef DENSE3D < hgsetget
         end
 
         function msh = rotateMesh(msh, R, center)
-            demeaned = bsxfun(@minus, msh.vertices, center);
-            msh.vertices = bsxfun(@plus, demeaned * R, center);
+            for k = 1:numel(msh)
+                demeaned = bsxfun(@minus, msh(k).vertices, center);
+                msh(k).vertices = bsxfun(@plus, demeaned * R, center);
+            end
         end
     end
 end

@@ -826,6 +826,9 @@ classdef DENSE3Dviewer < DataViewer
             api.deleteFcn   = @deleteFcn;
             api.resizeFcn   = @resizeFcn;
 
+            rotmat = eye(3);
+            center = [0 0 0];
+
             function initFcn()
                 self.exportaxes = true;
 
@@ -861,7 +864,11 @@ classdef DENSE3Dviewer < DataViewer
                     pause(3)
                 end
 
+                center = mean(self.Data.EpicardialMesh.vertices, 1);
+                rotmat = self.Data.rotationMatrix();
+
                 meshes = {[self.Data.EpicardialMesh, self.Data.EndocardialMesh]};
+                meshes{1} = self.Data.rotateMesh(meshes{1}, rotmat, center);
 
                 for k = 1:numel(meshes{1})
                     hmeshes(k) = patch(meshes{1}(k), 'FaceColor', 'w', 'FaceAlpha', 0.5, 'Parent', hax);
@@ -925,7 +932,7 @@ classdef DENSE3Dviewer < DataViewer
                         M(k).vertices = M(k).vertices + interp.query(M(k).vertices);
                     end
 
-                    meshes{frame} = M;
+                    meshes{frame} = self.Data.rotateMesh(M, rotmat, center);
                 end
 
                 msh = meshes{frame};
