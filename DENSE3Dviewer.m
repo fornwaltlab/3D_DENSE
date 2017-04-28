@@ -145,7 +145,7 @@ classdef DENSE3Dviewer < DataViewer
 
         function [file, data] = exportMat(obj, startpath)
 
-            if ~exist('startpath', 'var')
+            if ~exist('startpath', 'var') || isempty(startpath)
                 startpath = pwd;
             end
 
