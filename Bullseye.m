@@ -282,7 +282,15 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot & matlab.mixin.Heterogeneous
             end
 
             % Redraw the AHA lines
-            [X, Y, Z] = self.ahalines();
+            [X, Y] = self.ahalines();
+            Z = zeros(size(X)) + self.ZData;
+
+            % Need to apply a z offset so that OpenGL renderer doesn't
+            % screw things up on HG1
+            if ~ishg2
+                Z = Z + 0.6;
+            end
+
             set(self.haha, 'XData', X(:), 'YData', Y(:), 'ZData', Z(:));
 
             sz = max(size(self.CData), [40, 120]);
@@ -414,7 +422,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot & matlab.mixin.Heterogeneous
             end
         end
 
-        function [X, Y, Z] = ahalines(self)
+        function [X, Y] = ahalines(self)
 
             % Redraw the AHA lines
             t = [linspace(0, 2*pi, 100) NaN].';
@@ -437,8 +445,6 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot & matlab.mixin.Heterogeneous
 
             X = cat(1, X(:), tmpx(:));
             Y = cat(1, Y(:), tmpy(:));
-
-            Z = zeros(size(X)) + self.ZData + 0.01;
         end
 
         function buttonDown(self)

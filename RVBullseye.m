@@ -103,7 +103,7 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
             end
         end
 
-        function [X, Y, Z] = ahalines(self)
+        function [X, Y] = ahalines(self)
 
             if ~isfield(self.cache, 'ahalines')
                 [X, Y] = self.getSpokes(10);
@@ -112,8 +112,6 @@ classdef RVBullseye < plugins.dense3D_plugin.Bullseye
                 tmp = self.cache.ahalines;
                 X = tmp(:,1); Y = tmp(:,2);
             end
-
-            Z = zeros(size(X)) + self.ZData + 0.01;
         end
 
         function centers = segmentCenters(self)
