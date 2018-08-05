@@ -153,12 +153,14 @@ classdef DENSE3D < hgsetget
                 DI.Y = self.Strains.Locations(:,2);
                 DI.Z = self.Strains.Locations(:,3);
 
-                % Now sample the splines at these locations
-                DI.dX = zeros(size(self.Strains.Locations, 1), numel(frames));
-                DI.dY = zeros(size(self.Strains.Locations, 1), numel(frames));
-                DI.dZ = zeros(size(self.Strains.Locations, 1), numel(frames));
+                nFrames = numel(self.Interpolants);
 
-                for k = 1:numel(frames)
+                % Now sample the splines at these locations
+                DI.dX = zeros(size(self.Strains.Locations, 1), nFrames);
+                DI.dY = zeros(size(self.Strains.Locations, 1), nFrames);
+                DI.dZ = zeros(size(self.Strains.Locations, 1), nFrames);
+
+                for k = 1:nFrames
                     D = single(self.Interpolants(k).query(self.Strains.Locations));
                     DI.dX(:,k) = D(:,1);
                     DI.dY(:,k) = D(:,2);
