@@ -153,12 +153,14 @@ classdef DENSE3D < hgsetget
                 DI.Y = self.Strains.Locations(:,2);
                 DI.Z = self.Strains.Locations(:,3);
 
-                % Now sample the splines at these locations
-                DI.dX = zeros(size(self.Strains.Locations, 1), numel(frames));
-                DI.dY = zeros(size(self.Strains.Locations, 1), numel(frames));
-                DI.dZ = zeros(size(self.Strains.Locations, 1), numel(frames));
+                nFrames = numel(self.Interpolants);
 
-                for k = 1:numel(frames)
+                % Now sample the splines at these locations
+                DI.dX = zeros(size(self.Strains.Locations, 1), nFrames);
+                DI.dY = zeros(size(self.Strains.Locations, 1), nFrames);
+                DI.dZ = zeros(size(self.Strains.Locations, 1), nFrames);
+
+                for k = 1:nFrames
                     D = single(self.Interpolants(k).query(self.Strains.Locations));
                     DI.dX(:,k) = D(:,1);
                     DI.dY(:,k) = D(:,2);
@@ -198,6 +200,14 @@ classdef DENSE3D < hgsetget
                 RSI = rmfield(RSI, {'Segmentation', 'Locations'});
 
                 output.RegionalStrainInfo = RSI;
+            end
+
+            %--- Transmural Regional Strain Info ---%
+            if getfield(opts, 'TransmuralRegionalStrainInfo', true)
+                TRSI = self.transmuralRegionalStrains();
+                TRSI = rmfield(TRSI, {'Segmentation', 'Locations'});
+
+                output.TransmuralRegionalStrainInfo = TRSI;
             end
 
             output.AnalysisInstanceUID = dicomuid;
@@ -273,8 +283,86 @@ classdef DENSE3D < hgsetget
             hold on
         end
 
+        function output = transmuralRegionalStrains(self, nSegments)
+            % nSegments is: 16, 17 (default)
+            if ~exist('nSegments', 'var');
+                nSegments = 17;
+            end
+
+            % Compute the strains if necessary
+            if isempty(self.Strains)
+                self.computeStrains()
+            end
+
+            segments = segmentation(self.Strains.Parameterization, nSegments);
+
+            % Anonymous function for computing a radial index based on the
+            % parameterization value
+            radialIndex = @(x)sum(bsxfun(@gt, x(:), [0-eps,0.2,0.4,0.6,0.8,1.0+eps]), 2);
+
+            fields = fieldnames(self.Strains);
+
+            pts = self.Strains.Locations;
+            segs = zeros(size(pts(:,1)));
+
+            for k = 1:numel(segments)
+                segs(segments{k}) = k;
+            end
+
+            output = struct();
+            output.Segmentation = segments;
+
+            for k = 1:numel(fields)
+                value = self.Strains.(fields{k});
+
+                if isstruct(value)
+                    continue
+                end
+
+                % Compute the mean value of all points with each radial
+                for m = 1:numel(segments)
+                    segmentIndices = segments{m};
+
+                    % Now break the points down into radial locations
+                    rParams = self.Strains.Parameterization.Radial(segmentIndices);
+
+                    % Now convert these to "groups"
+                    rGroups = radialIndex(rParams);
+
+                    % For the groups we care about (1, 3, 5)
+                    subendoIndices  = segmentIndices(rGroups == 1);
+                    midIndices      = segmentIndices(rGroups == 3);
+                    subepiIndices   = segmentIndices(rGroups == 5);
+
+                    % Now compute the strains for these
+                    strainFunc = @(x)mean(self.Strains.(fields{k})(x,:), 1);
+                    output.(fields{k}).subendo(m,:)  = strainFunc(subendoIndices);
+                    output.(fields{k}).mid(m,:)      = strainFunc(midIndices);
+                    output.(fields{k}).subepi(m,:)   = strainFunc(subepiIndices);
+                    output.(fields{k}).ave(m,:)      = strainFunc(segmentIndices);
+                end
+            end
+
+            layers = {'subendo', 'mid', 'subepi'};
+            for n = 1:numel(layers)
+                inputs = struct( ...
+                    'CL', output.CL.(layers{n}), ...
+                    'CC', output.CC.(layers{n}), ...
+                    'RR', output.RR.(layers{n}), ...
+                    'LL', output.CC.(layers{n}));
+
+                uniformity = self.uniformityRatio(inputs);
+
+                output.CURE.(layers{n}) = uniformity.CURE;
+                output.RURE.(layers{n}) = uniformity.RURE;
+                output.LURE.(layers{n}) = uniformity.LURE;
+
+                output.CLShearAngle.(layers{n}) = rad2deg(self.torsion(inputs));
+            end
+        end
+
         function output = regionalStrains(self, nSegments)
-            % Group strains based upon their parameterization
+            % Group strains based upon their circumferential/longitudinal position
 
             % nSegments is: 16, 17 (default)
             if ~exist('nSegments', 'var');
@@ -286,56 +374,9 @@ classdef DENSE3D < hgsetget
                 self.computeStrains()
             end
 
-            lsegments = linspace(0-eps, 1+eps, 5);
-            lsegments(end) = [];
-
-            csegments = linspace(0-eps, 1+eps, 25);
-            csegments(end) = [];
-
-            % Shift these circumferential segments
-
-            % Break it into 4 segments longitudinally
-            L = bsxfun(@lt, self.Strains.Parameterization.Longitudinal, lsegments);
-            C = bsxfun(@gt, self.Strains.Parameterization.Circumferential, csegments);
-
-            Lseg = min(4 - cumsum(L, 2), [], 2);
-            Cseg = max(cumsum(C, 2), [], 2);
+            segments = segmentation(self.Strains.Parameterization, nSegments);
 
             fields = fieldnames(self.Strains);
-
-            indices = accumarray([Cseg(:), Lseg(:)], 1:size(L,1), [], @(x){x(:).'});
-
-            % This is going to be your standard model
-            segments = {
-                [indices{21:24, 4}]
-                [indices{1:4,   4}]
-                [indices{5:8,   4}]
-                [indices{9:12,  4}]
-                [indices{13:16, 4}]
-                [indices{17:20, 4}]
-
-                % Second longitudinal segment
-                [indices{21:24, 3}]
-                [indices{1:4,   3}]
-                [indices{5:8,   3}]
-                [indices{9:12,  3}]
-                [indices{13:16, 3}]
-                [indices{17:20, 3}]
-
-                % Third longitudinal segment
-                [indices{[20:24 1], 2}]
-                [indices{2:7,    2}]
-                [indices{8:13,   2}]
-                [indices{14:19,  2}]
-
-                % Apex
-                [indices{:,1}]
-            };
-
-            % Omit the apex if needed
-            if ismember(nSegments, [16, 18])
-                segments(end) = [];
-            end
 
             pts = self.Strains.Locations;
             segs = zeros(size(pts(:,1)));
@@ -367,25 +408,10 @@ classdef DENSE3D < hgsetget
             delays = RD.computeRegionalDelays(mean(output.p2,1));
             output.DelayTimes = cellfun(@(x)mean(delays(x)), segments);
 
-            % Compute CURE, RURE, and LURE
-
-            if ismember(nSegments, [18, 19])
-                lastinds = 13:18;
-            else
-                lastinds = 13:16;
-            end
-
-            output.CURE = [CURE(output.CC(1:6,:).'), ...
-                           CURE(output.CC(7:12,:).'), ...
-                           CURE(output.CC(lastinds,:).')].';
-
-            output.RURE = [CURE(output.RR(1:6,:).'), ...
-                           CURE(output.RR(7:12,:).'), ...
-                           CURE(output.RR(lastinds,:).')].';
-
-            output.LURE = [CURE(output.LL(1:6,:).'), ...
-                           CURE(output.LL(7:12,:).'), ...
-                           CURE(output.LL(lastinds,:).')].';
+            uniformity = self.uniformityRatio(output);
+            output.CURE = uniformity.CURE;
+            output.RURE = uniformity.RURE;
+            output.LURE = uniformity.LURE;
 
             output.CLShearAngle = rad2deg(self.torsion(output));
         end
@@ -811,6 +837,27 @@ classdef DENSE3D < hgsetget
             result = -asin(2 * strains.CL ./ ...
                 sqrt((1 + 2 * strains.CC) .* (1 + 2 * strains.LL)));
         end
+
+        function result = uniformityRatio(strains)
+            nSegments = size(strains.CC, 1);
+            if ismember(nSegments, [18, 19])
+                lastinds = 13:18;
+            else
+                lastinds = 13:16;
+            end
+
+            mapping = struct('CURE', 'CC', 'RURE', 'RR', 'LURE', 'LL');
+            types = fieldnames(mapping);
+
+            for k = 1:numel(types)
+                metric = types{k};
+                strain = strains.(mapping.(types{k}));
+
+                result.(metric) = [CURE(strain(1:6,:).'), ...
+                                   CURE(strain(7:12,:).'), ...
+                                   CURE(strain(lastinds,:).')].';
+            end
+        end
     end
 end
 
@@ -959,4 +1006,56 @@ function M = aa2mat(ax, theta)
     M = [t*x*x + c,     t*x*y - s*z,    t*x*z + s*y;
          t*x*y + s*z,   t*y*y + c,      t*y*z - s*x;
          t*x*z - s*y,   t*y*z + s*x,    t*z*z + c];
+end
+
+function segments = segmentation(parameterization, nSegments)
+    if ~exist('nSegments', 'var')
+        nSegments = 17;
+    end
+
+    lsegments = linspace(0-eps, 1+eps, 5);
+    lsegments(end) = [];
+
+    csegments = linspace(0-eps, 1+eps, 25);
+    csegments(end) = [];
+
+    L = bsxfun(@lt, parameterization.Longitudinal, lsegments);
+    C = bsxfun(@gt, parameterization.Circumferential, csegments);
+
+    Lseg = min(4 - cumsum(L, 2), [], 2);
+    Cseg = max(cumsum(C, 2), [], 2);
+
+    indices = accumarray([Cseg(:), Lseg(:)], 1:size(L,1), [], @(x){x(:).'});
+
+    % This is going to be your standard model
+    segments = {
+        [indices{21:24, 4}]
+        [indices{1:4,   4}]
+        [indices{5:8,   4}]
+        [indices{9:12,  4}]
+        [indices{13:16, 4}]
+        [indices{17:20, 4}]
+
+        % Second longitudinal segment
+        [indices{21:24, 3}]
+        [indices{1:4,   3}]
+        [indices{5:8,   3}]
+        [indices{9:12,  3}]
+        [indices{13:16, 3}]
+        [indices{17:20, 3}]
+
+        % Third longitudinal segment
+        [indices{[20:24 1], 2}]
+        [indices{2:7,    2}]
+        [indices{8:13,   2}]
+        [indices{14:19,  2}]
+
+        % Apex
+        [indices{:,1}]
+    };
+
+    % Omit the apex if needed
+    if ismember(nSegments, [16, 18])
+        segments(end) = [];
+    end
 end
