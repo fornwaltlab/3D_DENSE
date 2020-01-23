@@ -42,9 +42,12 @@ classdef DENSE3DPlugin < plugins.DENSEanalysisPlugin
             else
                 newstrs = {self.hdense.Data.Description};
 
+                apexind = self.hdense.apicalSlice();
+                [~, baseind] = self.hdense.basalSlice();
+
                 % Add the [base] and [apex] indicators
-                newstrs{1} = [newstrs{1}, ' [base]'];
-                newstrs{end} = [newstrs{end}, ' [apex]'];
+                newstrs{baseind} = [newstrs{1}, ' [base]'];
+                newstrs{apexind} = [newstrs{end}, ' [apex]'];
 
                 val = min(numel(newstrs), get(hlist, 'value'));
             end

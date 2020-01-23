@@ -1,4 +1,4 @@
-classdef Bullseye < plugins.dense3D_plugin.HGParrot
+classdef Bullseye < plugins.dense3D_plugin.HGParrot & matlab.mixin.Heterogeneous
 
     properties (SetObservable)
         AngularOffset   = 2*pi/3    % Angular offset of bullseye
@@ -9,7 +9,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         LabelFormat = '%0.2f'       % Either a string or func handle
         Radius = 1;                 % Radius to use
         ZData = 0;                  % Height of the plotted object
-        Segments = 17               % Number of AHA Segments (16 | 17)
+        Segments                    % Number of AHA Segments (16 | 17)
     end
 
     properties (Hidden)
@@ -85,21 +85,26 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         end
 
         function set.CData(self, value)
+
+            if isequal(value, self.CData)
+                return
+            end
+
             if ~isnumeric(value)
                 error(sprintf('%s:InvalidValue', mfilename), ...
                     'CData must be numeric')
             end
 
             self.CData = value;
-            self.resetCache();
+            self.resetCache('CData');
             self.refresh();
         end
 
         function set.SegmentAverages(self, value)
 
-            if ~ismember(numel(value), [16 17])
+            if ~ismember(numel(value), self.validSegments())
                 error(sprintf('%s:InvalidValue', mfilename), ...
-                    'There must be either 16 or 17 segment averages.')
+                    'Invalid number of segments specified')
             end
 
             % Compute the CData from this
@@ -110,8 +115,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
         function res = get.SegmentAverages(self)
             if ~isfield(self.cache, 'segmentAverages')
-                self.cache.segmentAverages = self.segment(self.CData, ...
-                    self.Segments, @mean);
+                self.cache.segmentAverages = self.segment(@mean);
             end
 
             res = self.cache.segmentAverages;
@@ -127,19 +131,20 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
         end
 
         function res = get.Apex(self)
-            opts = {'off', 'on'};
-            tf = ismember([16 17], self.Segments);
-            res = opts{tf};
+            if self.hasApex()
+                res = 'on';
+            else
+                res = 'off';
+            end
         end
 
         function set.Segments(self, value)
-            if ~isnumeric(value) || ~isscalar(value) || ~ismember(value, [16 17])
-                error(sprintf('%s:InvalidValue', mfilename), ...
-                    'Segments must be either 16 or 17');
+            if isequal(value, self.Segments)
+                return
             end
 
             self.Segments = value;
-            self.resetCache();
+            self.resetCache('Segments');
             self.refresh();
         end
 
@@ -150,11 +155,19 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                     'Apex value must be ''on'' or ''off''')
             end
 
-            if strcmpi(value, 'on')
-                self.Segments = 17;
-            else
-                self.Segments = 16;
-            end
+            self.Segments = floor(self.Segments / 2) * 2 + strcmpi(value, 'on');
+        end
+    end
+
+    methods (Sealed)
+        function disp(self)
+            disp@plugins.dense3D_plugin.HGParrot(self)
+        end
+    end
+
+    methods (Access = 'protected')
+        function bool = hasApex(self)
+            bool = self.Segments == 17;
         end
     end
 
@@ -178,6 +191,10 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
             self@plugins.dense3D_plugin.HGParrot(hggroup('Parent', parent))
             self.Type = 'Bullseye';
+
+            % Set the default segment
+            segments = self.validSegments();
+            self.Segments = segments(1);
 
             set(self.Handle, 'ButtonDownFcn', @(s,e)buttonDown(self));
 
@@ -205,12 +222,8 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                 'HandleVisibility', 'off', ...
                 'Tag',              'bullseye.surf');
 
-            t = linspace(0, 2*pi, 100);
-            x = self.Radius * cos(t);
-            y = self.Radius * sin(t);
-
             % AHA Lines
-            self.haha = line(x, y, ...
+            self.haha = line(NaN, NaN, NaN, ...
                 'Parent',           self.Handle, ...
                 'Color',            'k', ...
                 'HitTest',          'off', ...
@@ -219,7 +232,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
                 'Tag',              'bullseye.lines');
 
             % Text objects in the middle of the segments
-            self.htext = gobjects(17, 1);
+            self.htext = gobjects(max(self.validSegments), 1);
 
             self.htextgroup = hggroup( ...
                 'Parent',           self.Handle, ...
@@ -269,45 +282,29 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             end
 
             % Redraw the AHA lines
-            t = [linspace(0, 2*pi, 100) NaN].';
-            rings = (0.25:0.25:1) * self.Radius;
+            [X, Y] = self.ahalines();
+            Z = zeros(size(X)) + self.ZData;
 
-            X = bsxfun(@times, rings, cos(t));
-            Y = bsxfun(@times, rings, sin(t));
-
-            % Now worry about the 6 * spokes
-            t = linspace(0, 2*pi, 6 + 1).' + self.AngularOffset;
-            tmpx = bsxfun(@times, [rings([2 4]) NaN], cos(t)).';
-            tmpy = bsxfun(@times, [rings([2 4]) NaN], sin(t)).';
-
-            X = cat(1, X(:), tmpx(:));
-            Y = cat(1, Y(:), tmpy(:));
-
-            t = linspace(0, 2*pi, 4 + 1).' + (self.AngularOffset + pi/12);
-            tmpx = bsxfun(@times, [rings(1:2) NaN], cos(t)).';
-            tmpy = bsxfun(@times, [rings(1:2) NaN], sin(t)).';
-
-            X = cat(1, X(:), tmpx(:));
-            Y = cat(1, Y(:), tmpy(:));
-
-            Z = zeros(size(X)) + self.ZData + 0.01;
+            % Need to apply a z offset so that OpenGL renderer doesn't
+            % screw things up on HG1
+            if ~ishg2
+                Z = Z + 0.6;
+            end
 
             set(self.haha, 'XData', X(:), 'YData', Y(:), 'ZData', Z(:));
 
-            sz = max(size(self.CData), [12, 120]);
+            sz = max(size(self.CData), [40, 120]);
 
             % Get the coordinates of the surface
             [X,Y] = self.computeCoordinates(sz, self.AngularOffset, rlims);
             Z = self.ZData * zeros(size(X));
+
             switch lower(self.Display)
                 case 'raw'
                     if ~isempty(self.CData)
                         cdata = self.CData;
-                        %cdata = imresize(self.CData, sz, 'nearest');
 
                         if ~isempty(self.AlphaData)
-                            %adata = imresize(self.AlphaData, flip(size(X)), 'nearest');
-                            %adata = adata([1 1:end], [1 1:end]);
                             adata = self.AlphaData;
                         else
                             adata = 1;
@@ -371,14 +368,14 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
             % If the LabelFormat is a function handle
             if isa(self.LabelFormat, 'function_handle')
-                vals = self.segment(self.CData, self.Segments);
+                vals = self.segment();
                 labels = cellfun(self.LabelFormat, vals, 'Uniform', 0);
             else
                 func = @(x)sprintf(self.LabelFormat, x);
                 labels = arrayfun(func, self.SegmentAverages, 'Uniform', 0);
             end
 
-            if numel(labels) == 16
+            if strcmpi(self.Apex, 'off')
                 labels{end+1} = '';
             end
 
@@ -390,6 +387,11 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
     end
 
     methods (Access = 'protected')
+
+        function res = validSegments(~)
+            res = [17, 16];
+        end
+
         function centers = segmentCenters(self)
             % segmentCenters - Compute the center of each AHA segment
             %
@@ -420,6 +422,31 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             end
         end
 
+        function [X, Y] = ahalines(self)
+
+            % Redraw the AHA lines
+            t = [linspace(0, 2*pi, 100) NaN].';
+            rings = (0.25:0.25:1) * self.Radius;
+
+            X = bsxfun(@times, rings, cos(t));
+            Y = bsxfun(@times, rings, sin(t));
+
+            % Now worry about the 6 * spokes
+            t = linspace(0, 2*pi, 6 + 1).' + self.AngularOffset;
+            tmpx = bsxfun(@times, [rings([2 4]) NaN], cos(t)).';
+            tmpy = bsxfun(@times, [rings([2 4]) NaN], sin(t)).';
+
+            X = cat(1, X(:), tmpx(:));
+            Y = cat(1, Y(:), tmpy(:));
+
+            t = linspace(0, 2*pi, 4 + 1).' + (self.AngularOffset + pi/12);
+            tmpx = bsxfun(@times, [rings(1:2) NaN], cos(t)).';
+            tmpy = bsxfun(@times, [rings(1:2) NaN], sin(t)).';
+
+            X = cat(1, X(:), tmpx(:));
+            Y = cat(1, Y(:), tmpy(:));
+        end
+
         function buttonDown(self)
             % 1) Compute which segment the click happened in
             % 2) Create a custom event data object containing this info
@@ -435,8 +462,7 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             % Determine which segment was clicked
             data.X = point(1,1);
             data.Y = point(1,2);
-            data.Segment = self.whichSegment(data.X, data.Y, ...
-                self.Radius, self.AngularOffset);
+            data.Segment = self.whichSegment(data.X, data.Y);
 
             import plugins.dense3D_plugin.*
 
@@ -445,58 +471,20 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             end
         end
 
-        function resetCache(self)
+        function resetCache(self, propname)
             self.cache = struct();
         end
     end
 
-    methods (Static, Hidden)
-        function segment = whichSegment(x, y, radius, offset)
-            % whichSegment - Determine which segment a point lies in
-            %
-            % USAGE:
-            %   segment = whichSegment(x, y, radius, offset)
-            %
-            % INPUTS:
-            %   x:      Double, X Coordinates of the points to query
-            %   y:      Double, Y Coordinates of the points to query
-            %   radius: Scalar, Radius of the bullseye
-            %   offset: Scalar, Angular offset (in radians) of the bullseye
-
-            % Initialize the output
-            segment = nan(size(x));
-
-            [theta, R] = cart2pol(x, y);
-
-            % Determine which circumferential ring we belong to
-            ringnum = ceil(R ./ radius ./ 0.25);
-            [outer, inds] = ismember(ringnum, [3 4]);
-
-            % Now figure out the circumferential position
-            outerthetas = ceil(mod(theta(outer) - offset + pi/3, 2*pi) / (pi/3));
-            segment(outer) = (2 - inds(outer)) * 6 + outerthetas;
-
-            inner = ringnum == 2;
-            innerthetas = ceil(mod(theta(inner) - offset + 5*pi/12, 2*pi) / (pi/2));
-            segment(inner) = innerthetas + 12;
-
-            segment(ringnum == 1) = 17;
-        end
-
-        function segments = segment(data, nSegments, operation)
+    methods (Hidden)
+        function segments = segment(self, operation)
             % segment - Segments the provided data into AHA segment data
             %
             % USAGE:
-            %   segments = segment(data, nSegments)
-            %   values = segment(data, nSegments, operation)
+            %   segments = segment()
+            %   values = segment(operation)
             %
             % INPUTS:
-            %   data:       [M x N] Matrix, Data to be carved up into AHA
-            %               segments
-            %
-            %   nSegments:  Scalar, Indicates the number of AHA segments.
-            %               Valid values are either 16 or 17.
-            %
             %   operation:  Function Handle (optional), Operation to
             %               perform on the data for each segment
             %
@@ -510,8 +498,12 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             %               applying the specified operation to the data
             %               from each segment
 
-            import plugins.dense3D_plugin.*
-            template = Bullseye.getTemplate(nSegments);
+            template = self.getTemplate(self.Segments);
+            data = self.CData;
+
+            if isempty(data)
+                data = NaN;
+            end
 
             % Now scale the image and the mask to the same size
             dims = lcm(size(template), size(data));
@@ -525,6 +517,59 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
 
             segments = accumarray(mask(:), data(:), [], operation);
         end
+
+        function [X, Y] = computeCoordinates(~, sz, offset, rlim)
+            % computeCoordinates - Static method to compute coordinates
+            %
+            %   The surface requires X,Y,Z coordinates of all of the
+            %   vertices so this function does all of that calculation,
+            %   provided the angular offset, the size of the CData, as well
+            %   as the radius limits.
+
+            % Get the dimensions of the CData
+            nl = sz(2);
+            ns = sz(1);
+
+            % Scale the radii to be in the radius range provided
+            r = linspace(rlim(1), rlim(2), ns + 1).';
+
+            % Compute the angle and take into account the offset
+            theta = linspace(2*pi + offset, offset, nl + 1);
+            theta(end) = [];
+
+            X = r * cos(theta);
+            Y = r * sin(theta);
+
+            % Append the first coordinate to the end because of the extra
+            % row in the CData
+            X = X(:, [1:end 1]);
+            Y = Y(:, [1:end 1]);
+        end
+
+        function segment = whichSegment(self, x, y)
+            % whichSegment - Determine which segment a point lies in
+            %
+            % USAGE:
+            %   segment = whichSegment(x, y, radius, offset)
+            %
+            % INPUTS:
+            %   x:      Double, X Coordinates of the points to query
+            %   y:      Double, Y Coordinates of the points to query
+            %   radius: Scalar, Radius of the bullseye
+            %   offset: Scalar, Angular offset (in radians) of the bullseye
+
+
+            X = get(self.hsurf, 'XData');
+            Y = get(self.hsurf, 'YData');
+
+            template = rot90(self.getTemplate(self.Segments, size(X)), 2);
+            [~, ind] = min((X(:) - x).^2 + (Y(:) - y).^2);
+
+            segment = template(ind);
+        end
+    end
+
+    methods (Static, Hidden)
 
         function template = getTemplate(nSegments, sz)
             % getTemplate - Method for generating an AHA template image
@@ -557,34 +602,6 @@ classdef Bullseye < plugins.dense3D_plugin.HGParrot
             if exist('sz', 'var')
                 template = imresize(template, sz, 'nearest');
             end
-        end
-
-        function [X, Y] = computeCoordinates(sz, offset, rlim)
-            % computeCoordinates - Static method to compute coordinates
-            %
-            %   The surface requires X,Y,Z coordinates of all of the
-            %   vertices so this function does all of that calculation,
-            %   provided the angular offset, the size of the CData, as well
-            %   as the radius limits.
-
-            % Get the dimensions of the CData
-            nl = sz(2);
-            ns = sz(1);
-
-            % Scale the radii to be in the radius range provided
-            r = linspace(rlim(1), rlim(2), ns + 1).';
-
-            % Compute the angle and take into account the offset
-            theta = linspace(2*pi + offset, offset, nl + 1);
-            theta(end) = [];
-
-            X = r * cos(theta);
-            Y = r * sin(theta);
-
-            % Append the first coordinate to the end because of the extra
-            % row in the CData
-            X = X(:, [1:end 1]);
-            Y = Y(:, [1:end 1]);
         end
 
         function h = demo()

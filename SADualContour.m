@@ -27,16 +27,16 @@ classdef SADualContour < ROIType
             cdata = ind2rgb(cdata, cmap);
 
             self@ROIType('hsadual', 'Short Axis Dual Ventricle', 3, ...
-                'sadual', cdata, true, true);
+                'sadual', cdata, true, true, {'r', 'g', 'y'});
         end
 
         function [pos, iscls, iscrv, iscrn] = drawContour(self, hax, varargin)
             [outer, left, right] = getSAFull(hax, varargin{:});
 
-            pos     = {outer, left, right};
+            pos     = {outer, left, right.Position};
             iscls   = {self.Closed};
             iscrv   = {self.Curved};
-            iscrn   = {false};
+            iscrn   = {false, false, right.Corners};
         end
     end
 

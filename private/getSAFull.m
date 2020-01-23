@@ -91,17 +91,6 @@ function [outervert,leftvert,rightvert] = getSAFull(varargin)
 %   seem to clip correctly.
 %
 
-%WRITTEN BY:    Drew Gilliam
-%
-%MODIFICATION HISTORY:
-%   2008        Drew Gilliam
-%     --creation
-%   2009.02     Drew Gilliam
-%     --general update
-%     --primary control transferred to GETSELECTION
-%     --input parsing passed to private/PARSESLAINPUTS
-
-
 
     %% MAIN CODE
 
@@ -145,12 +134,35 @@ function [outervert,leftvert,rightvert] = getSAFull(varargin)
     s = s(1:end-1);
     leftvert = fnval(pp,s)';
 
-    pp = cscvn2(rcont','periodic');
-    s = linspace(0,pp.breaks(end),round(args.PointsPerContour * 1.5)+1);
-    s = s(1:end-1);
-    rightvert = fnval(pp,s)';
+    % For the RV we DO have corners so we need to deal with these
+    pointsper = floor(args.PointsPerContour / 2);
+
+    corners = rcont.Corners;
+
+    % Look at the lateral wall
+    pp = cscvn2(rcont.Position(corners(1):corners(2),:).');
+    s = linspace(0, pp.breaks(end), round(pointsper * 1.5) + 1);
+    verts1 = fnval(pp, s(1:end-1)).';
 
 
+    % Now remove the first and last vertex
+    pp = cscvn2(rcont.Position(corners(2):end,:).');
+    s = linspace(0, pp.breaks(end), round(pointsper * 1.5) + 1);
+    verts2 = fnval(pp, s(1:end-1)).';
+
+    vertices = cat(1, verts1, verts2);
+
+    corners = false(size(vertices, 1), 1);
+    corners([1 size(verts1, 1)+1]) = true;
+
+    rightvert.Position = vertices;
+    rightvert.Corners = corners;
+
+    %verts([1 end],:) = [];
+    %pp = cscvn2(rcont','periodic');
+    %s = linspace(0,pp.breaks(end),round(args.PointsPerContour * 1.5)+1);
+    %s = s(1:end-1);
+    %rightvert = fnval(pp,s)';
 
     %% NESTED FUNCTION: INITIALIZE DISPLAY
     function hgroup = init(hax)
@@ -203,7 +215,7 @@ function [outervert,leftvert,rightvert] = getSAFull(varargin)
 
 
     %% NESTED FUNCTION: REDRAW DISPLAY
-    function redraw(pos,dbl)
+    function redraw(pos, ~)
 
         x = pos(:,1);
         y = pos(:,2);
@@ -221,12 +233,9 @@ function [outervert,leftvert,rightvert] = getSAFull(varargin)
             'ydata',ocont([1:end,1],2));
         set(hcontour(2),'xdata',lcont([1:end,1],1),...
             'ydata',lcont([1:end,1],2));
-        set(hcontour(3),'xdata',rcont([1:end,1],1),...
-            'ydata',rcont([1:end,1],2));
-
+        set(hcontour(3),'xdata',rcont.Position([1:end,1],1),...
+            'ydata',rcont.Position([1:end,1],2));
     end
-
-
 end
 
 
@@ -245,8 +254,8 @@ function [orect,ocont,irect,lcont,rcont] = contourrecovery(x,y,N)
     yc = mean(y(1:2));
 
     % control point unsigned distance to center
-    dx = abs(x-xc);
-    dy = abs(y-yc);
+    dx = abs(x - xc);
+    dy = abs(y - yc);
 
     % object non-negative thickness
     xthick = dx(1)-dx(3);
@@ -264,12 +273,55 @@ function [orect,ocont,irect,lcont,rcont] = contourrecovery(x,y,N)
     irect = [xi(:),yi(:)];
 
     % contour coordinates
-    ocont = contourvertices(xc,yc,dx(1),dy(1),N);
-    lcont = contourvertices(xc + (dx(3)/1.9), yc, dx(3)/2, dy(end), N);
-    rcont = contourvertices(xc - (dx(3)/1.9), yc, dx(3)/2, dy(end), N);
+    ocont = contourvertices(xc, yc, dx(1), dy(1), N);
+
+    % Create the RV which is a full ellipse
+    ellipsecontour =  contourvertices(xc, yc, dx(3), dy(3), N);
+
+    % Make the LV a circle of radius thick that is against the right edge
+    radius = min(dx(3), dy(3));
+    lvcenter = [xc + dx(3) - radius, yc + dy(3) - radius];
+
+    lcont = contourvertices(lvcenter(1), lvcenter(2), radius, radius, N);
+
+    if isnan(dx(3))
+        rcont.Position = lcont;
+    else
+        % Blow up the LV by 10% and use that to chop the RV
+        clipping = bsxfun(@plus, bsxfun(@minus, lcont, lvcenter) * 1.2, lvcenter);
+
+        clip.x = clipping(:,1);
+        clip.y = clipping(:,2);
+
+        ellipse.x = ellipsecontour(:,1);
+        ellipse.y = ellipsecontour(:,2);
+
+        R = PolygonClip(ellipse, clip, 0);
+
+        rcont.Position = [R.x, R.y];
+
+        if isempty(rcont.Position)
+            rcont.Corners = [];
+            return;
+        end
+
+        % Make the contour periodic
+        pos = rcont.Position([1:end 1], :);
+
+        isnew = ~ismember(pos, ellipsecontour, 'rows');
+        deltas = diff(isnew);
+
+        isCorner = logical(deltas);
+
+        firstCorner = find(isCorner, 1);
+
+        % Shift it so that we start on a corner
+        rcont.Position = circshift(rcont.Position, [-firstCorner+1, 0]);
+        isCorner = circshift(isCorner, [-firstCorner+1, 0]);
+
+        rcont.Corners = find(isCorner);
+    end
 end
-
-
 
 %% CONTOUR VERTICES
 function vert = contourvertices(xc,yc,a,b,N)
@@ -280,13 +332,8 @@ function vert = contourvertices(xc,yc,a,b,N)
     theta = linspace(-pi,pi,N);
     theta = theta(1:end-1);
 
-    xtmp = xc + a*cos(theta);
-    ytmp = yc + b*sin(theta);
+    xtmp = xc + a * cos(theta);
+    ytmp = yc + b * sin(theta);
 
     vert = [xtmp(:),ytmp(:)];
-
 end
-
-
-
-%% END OF FILE=============================================================
