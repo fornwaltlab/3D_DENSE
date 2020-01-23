@@ -1,3 +1,4 @@
 function deg = rad2deg(rad)
-    deg = (180 / pi) .* rad;
+    % Function for computing from radians to degrees
+    deg = (180 / pi) .* double(rad);
 end
